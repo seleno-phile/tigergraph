@@ -124,8 +124,9 @@ async def upload(collection_id: Optional[str] = None, files: List[UploadFile] = 
             "title": f"<b>CHUNK CONTENT:</b><br>{ch['text'][:300]}..." 
         })
         edges.append({"from": ch["source"], "to": ch_id, "label": "HAS_CHUNK"})
-        kws = extract_keywords(ch["text"])
-        for kw in kws[:2]:
+        chunk_kws = extract_keywords(ch["text"])
+        prev_kw = None
+        for kw in chunk_kws[:4]:
             if kw not in added_ids:
                 nodes.append({
                     "id": kw, 
@@ -134,7 +135,19 @@ async def upload(collection_id: Optional[str] = None, files: List[UploadFile] = 
                     "title": f"<b>ENTITY:</b> {kw}<br>Type: Technical Concept"
                 })
                 added_ids.add(kw)
-            edges.append({"from": ch_id, "to": kw, "label": "MENTIONS"})
+            
+            edges.append({"from": ch_id, "to": kw, "label": "MENTIONS", "width": 1})
+            
+            if prev_kw:
+                edges.append({
+                    "from": prev_kw, 
+                    "to": kw, 
+                    "label": "CO_OCCURS", 
+                    "color": "#ffaa00",
+                    "width": 2,
+                    "dashes": True
+                })
+            prev_kw = kw
 
     return UploadResponse(
         collection_id=collection_id, message="Indexed",
