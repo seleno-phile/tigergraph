@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 
-PORT = 8000
+PORT = 8080
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 
 class DashboardHTTPHandler(http.server.SimpleHTTPRequestHandler):

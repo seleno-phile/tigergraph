@@ -78,12 +78,12 @@ const DashboardConfig = {
 
     // API Configuration (for production backend)
     api: {
-        baseUrl: 'http://localhost:3001',  // Change to your backend
+        baseUrl: 'http://localhost:8000',  // Change to your backend
         endpoints: {
-            query: '/api/query',
-            upload: '/api/upload',
-            documents: '/api/documents',
-            graph: '/api/graph',
+            query: '/query',
+            upload: '/upload',
+            documents: '/status',
+            graph: '/status',
         },
         headers: {
             'Content-Type': 'application/json',
