@@ -1,11 +1,14 @@
-// Dashboard functionality
+// Dashboard functionality - Rewired for GraphRAG Backend
 class Dashboard {
     constructor() {
-        this.uploadBox = document.querySelector('.upload-box');
-        this.queryInput = document.querySelector('.query-input');
-        this.queryBtn = document.querySelector('.query-btn');
+        this.uploadBox = document.getElementById('uploadBox');
+        this.queryInput = document.getElementById('queryInput');
+        this.queryBtn = document.getElementById('queryBtn');
+        this.collectionId = localStorage.getItem('graphrag_collection_id');
         this.documents = [];
+        this.baseUrl = DashboardConfig.api.baseUrl;
         this.setupEventListeners();
+        this.updateSystemStatus();
     }
 
     setupEventListeners() {
@@ -29,209 +32,157 @@ class Dashboard {
     triggerFileUpload() {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = '.pdf,.txt';
+        input.accept = '.pdf,.txt,.docx';
+        input.multiple = true;
         input.onchange = (e) => this.handleFileSelect(e);
         input.click();
     }
 
     handleDragOver(e) {
         e.preventDefault();
-        e.stopPropagation();
-        this.uploadBox.style.backgroundColor = 'rgba(0, 212, 255, 0.15)';
-        this.uploadBox.style.borderColor = '#00ff88';
+        this.uploadBox.style.backgroundColor = 'rgba(0, 212, 255, 0.1)';
     }
 
-    handleFileDrop(e) {
+    async handleFileDrop(e) {
         e.preventDefault();
-        e.stopPropagation();
-        this.uploadBox.style.backgroundColor = 'rgba(0, 212, 255, 0.05)';
-        this.uploadBox.style.borderColor = '#00d4ff';
-        
+        this.uploadBox.style.backgroundColor = '';
         const files = e.dataTransfer.files;
-        for (let file of files) {
-            this.addDocument(file);
-        }
+        await this.uploadFiles(files);
     }
 
-    handleFileSelect(e) {
+    async handleFileSelect(e) {
         const files = e.target.files;
+        await this.uploadFiles(files);
+    }
+
+    async uploadFiles(files) {
+        const formData = new FormData();
         for (let file of files) {
-            this.addDocument(file);
-        }
-    }
-
-    addDocument(file) {
-        // Check file size (max 500MB)
-        if (file.size > 500 * 1024 * 1024) {
-            alert('File size exceeds 500MB limit');
-            return;
+            formData.append('files', file);
         }
 
-        // Check file type
-        if (!['application/pdf', 'text/plain'].includes(file.type)) {
-            alert('Only PDF and TXT files are supported');
-            return;
-        }
+        const url = new URL(`${this.baseUrl}${DashboardConfig.api.endpoints.upload}`);
+        if (this.collectionId) url.searchParams.append('collection_id', this.collectionId);
 
-        const document = {
-            id: Date.now(),
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            uploadDate: new Date(),
-            progress: 0
-        };
-
-        this.documents.push(document);
-        this.simulateFileProcessing(document);
-        this.updateDocumentsList();
-    }
-
-    simulateFileProcessing(document) {
-        let progress = 0;
-        const interval = setInterval(() => {
-            progress += Math.random() * 30;
-            if (progress >= 100) {
-                progress = 100;
-                clearInterval(interval);
-                document.indexed = true;
-                this.updateDocumentsList();
-            }
-            document.progress = progress;
-            this.updateDocumentsList();
-        }, 300);
-    }
-
-    updateDocumentsList() {
-        const documentsList = document.querySelector('.documents-list');
-        if (!documentsList) return;
-
-        documentsList.innerHTML = '';
-
-        this.documents.forEach(doc => {
-            const docElement = document.createElement('div');
-            docElement.className = 'document-item' + (doc.indexed ? ' indexed' : '');
+        try {
+            this.queryBtn.textContent = '...';
+            const response = await fetch(url, {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
             
-            const name = document.createElement('span');
-            name.className = 'doc-name';
-            name.textContent = doc.name;
+            if (result.collection_id) {
+                this.collectionId = result.collection_id;
+                localStorage.setItem('graphrag_collection_id', this.collectionId);
+            }
+            
+            this.updateSystemStatus();
+            alert(result.message || 'Upload successful');
+        } catch (err) {
+            console.error('Upload failed:', err);
+            alert('Upload failed. Check console for details.');
+        } finally {
+            this.queryBtn.textContent = '⚡';
+        }
+    }
 
-            const status = document.createElement('span');
-            if (doc.indexed) {
-                status.className = 'doc-status indexed-tag';
-                status.textContent = 'INDEXED';
+    async updateSystemStatus() {
+        if (!this.collectionId) return;
+
+        try {
+            const response = await fetch(`${this.baseUrl}/status/${this.collectionId}`);
+            const data = await response.json();
+            
+            if (data.error) return;
+
+            document.getElementById('metricChunks').textContent = data.chunks_count || '0';
+            document.getElementById('metricNodes').textContent = data.entities_count || '0';
+            
+            const list = document.getElementById('documentsList');
+            list.innerHTML = ''; // Safe because we populate with textContent below
+            
+            if (data.documents_count === 0) {
+                list.textContent = 'No documents uploaded';
             } else {
-                status.className = 'doc-status';
-                status.textContent = Math.round(doc.progress) + '%';
+                // In a real app, we'd fetch the doc names from status or a separate endpoint
+                const info = document.createElement('div');
+                info.className = 'document-item indexed';
+                info.textContent = `${data.documents_count} Document(s) active in session`;
+                list.appendChild(info);
             }
 
-            docElement.appendChild(name);
-            docElement.appendChild(status);
-            documentsList.appendChild(docElement);
-        });
-
-        // Update metrics
-        this.updateMetrics();
-    }
-
-    updateMetrics() {
-        const metrics = {
-            'RECORDS RETRIEVED': Math.floor(1200 + this.documents.length * 400),
-            'RELEVANCE SCORE': Math.floor(75 + this.documents.length * 3)
-        };
-
-        const metricElements = document.querySelectorAll('.metric');
-        metricElements.forEach(metric => {
-            const label = metric.querySelector('.metric-label').textContent;
-            const value = metrics[label];
-            if (value !== undefined) {
-                metric.querySelector('.metric-value').textContent = value + (label.includes('SCORE') ? '%' : 'K');
+            // Update Graph if possible
+            if (window.GraphVisualizer && typeof window.GraphVisualizer.updateGraph === 'function') {
+                const graphRes = await fetch(`${this.baseUrl}/graph/${this.collectionId}`);
+                const graphData = await graphRes.json();
+                window.GraphVisualizer.updateGraph(graphData.nodes, graphData.edges);
             }
-        });
+        } catch (err) {
+            console.error('Status check failed:', err);
+        }
     }
 
-    executeQuery() {
+    async executeQuery() {
         const query = this.queryInput.value.trim();
         if (!query) return;
-
-        console.log('Executing query:', query);
-        
-        // Simulate query processing
-        this.queryBtn.disabled = true;
-        this.queryBtn.textContent = '⟳';
-        this.queryBtn.style.animation = 'spin 1s linear infinite';
-
-        // Add spin animation
-        if (!document.querySelector('#spinStyle')) {
-            const style = document.createElement('style');
-            style.id = 'spinStyle';
-            style.textContent = `
-                @keyframes spin {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(360deg); }
-                }
-            `;
-            document.head.appendChild(style);
+        if (!this.collectionId) {
+            alert('Please upload documents first.');
+            return;
         }
 
-        // Simulate processing time
-        setTimeout(() => {
-            this.queryBtn.disabled = false;
-            this.queryBtn.textContent = '⚡';
-            this.queryBtn.style.animation = 'none';
-            
-            // Show result (in production, this would fetch from server)
-            this.showQueryResult(query);
-        }, 1500);
-    }
+        this.queryBtn.disabled = true;
+        this.queryBtn.classList.add('spinning');
+        document.getElementById('currentQueryLabel').textContent = `> "${query}"`;
 
-    showQueryResult(query) {
-        // Create a notification
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 30px;
-            right: 30px;
-            background: rgba(0, 255, 136, 0.1);
-            border: 1px solid #00ff88;
-            border-radius: 4px;
-            padding: 15px 20px;
-            color: #00ff88;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            z-index: 1000;
-            animation: slideIn 0.3s ease;
-            max-width: 300px;
-        `;
+        try {
+            const startTime = Date.now();
+            const response = await fetch(`${this.baseUrl}${DashboardConfig.api.endpoints.query}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: query,
+                    collection_id: this.collectionId
+                })
+            });
+            const result = await response.json();
+            const latency = Date.now() - startTime;
 
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes slideIn {
-                from { transform: translateX(350px); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
+            if (!response.ok) {
+                const errorMsg = result.detail || result.error || 'Unknown error';
+                document.getElementById('llmOnlyText').textContent = `Error: ${errorMsg}`;
+                document.getElementById('ragText').textContent = `Error: ${errorMsg}`;
+                document.getElementById('graphRagText').textContent = `Error: ${errorMsg}`;
+                
+                if (response.status === 404) {
+                    alert('Session expired or server restarted. Please re-upload documents.');
+                    this.collectionId = null;
+                    localStorage.removeItem('graphrag_collection_id');
+                }
+                return;
             }
-        `;
-        document.head.appendChild(style);
 
-        notification.innerHTML = `
-            <strong>✓ Query Processed</strong><br>
-            <small>"${query}"</small><br>
-            <small style="opacity: 0.7;">Results returned in 1.2ms</small>
-        `;
+            document.getElementById('systemStatus').textContent = `SYSTEM: ONLINE // LATENCY: ${latency}ms`;
+            
+            // Safe DOM assignment
+            document.getElementById('llmOnlyText').textContent = result.llm_answer || 'No answer generated';
+            document.getElementById('ragText').textContent = result.rag_answer || 'No answer generated';
+            document.getElementById('graphRagText').textContent = result.graphrag_answer || 'No answer generated';
 
-        document.body.appendChild(notification);
-
-        setTimeout(() => {
-            notification.style.animation = 'slideOut 0.3s ease forwards';
-            setTimeout(() => notification.remove(), 300);
-        }, 3000);
+        } catch (err) {
+            console.error('Query failed:', err);
+            const msg = 'Error: Failed to connect to backend server. Make sure it is running on port 8000.';
+            document.getElementById('llmOnlyText').textContent = msg;
+            document.getElementById('ragText').textContent = msg;
+            document.getElementById('graphRagText').textContent = msg;
+        } finally {
+            this.queryBtn.disabled = false;
+            this.queryBtn.classList.remove('spinning');
+        }
     }
 }
 
-// Initialize dashboard
+// Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    const dashboard = new Dashboard();
-    
-    // Initialize with sample metrics
-    dashboard.updateMetrics();
+    window.dashboard = new Dashboard();
 });

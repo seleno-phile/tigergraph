@@ -3,17 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Supply Chain Intelligence</title>
+    <title>GraphRAG Multi-Document Intelligence</title>
     <link rel="stylesheet" href="styles.css">
+    <style>
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .ans-column {
+            background: rgba(10, 14, 39, 0.7);
+            border: 1px solid #2a3050;
+            padding: 15px;
+            border-radius: 4px;
+            min-height: 300px;
+        }
+        .ans-column h4 {
+            margin-top: 0;
+            color: #00d4ff;
+            border-bottom: 1px solid #2a3050;
+            padding-bottom: 5px;
+        }
+        .ans-text {
+            font-size: 13px;
+            line-height: 1.5;
+            color: #e0e0e0;
+            white-space: pre-wrap;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <header class="header">
             <div class="header-content">
-                <h1>SUPPLY CHAIN INTELLIGENCE</h1>
+                <h1>GRAPHRAG MULTI-DOCUMENT INTELLIGENCE</h1>
                 <div class="header-meta">
-                    <span class="system-label">SYSTEM: ONLINE // LATENCY: 1ms</span>
+                    <span class="system-label" id="systemStatus">SYSTEM: ONLINE // LATENCY: --</span>
                 </div>
             </div>
         </header>
@@ -22,37 +49,31 @@
             <!-- Left Sidebar -->
             <aside class="sidebar-left">
                 <div class="upload-section">
-                    <div class="upload-box">
+                    <div class="upload-box" id="uploadBox">
                         <svg class="upload-icon" viewBox="0 0 24 24">
                             <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
                         </svg>
-                        <p class="upload-label">UPLOAD PDF / TXT</p>
+                        <p class="upload-label">UPLOAD PDF / TXT / DOCX</p>
                         <p class="upload-sublabel">Max 500MB per file</p>
                     </div>
                 </div>
 
                 <div class="documents-section">
                     <h3>ACTIVE DOCUMENTS</h3>
-                    <div class="documents-list">
-                        <div class="document-item indexed">
-                            <span class="doc-name">Project_alpha_supply_chain.pdf</span>
-                            <span class="doc-status">100%</span>
-                        </div>
-                        <div class="document-item">
-                            <span class="doc-name">Supplier_logistics_Q2.txt</span>
-                            <span class="doc-status indexed-tag">INDEXED</span>
-                        </div>
+                    <div class="documents-list" id="documentsList">
+                        <!-- Documents will be listed here -->
+                        <div class="empty-state">No documents uploaded</div>
                     </div>
                 </div>
 
                 <div class="metrics-section">
                     <div class="metric">
-                        <span class="metric-label">RECORDS RETRIEVED</span>
-                        <span class="metric-value">1.2K</span>
+                        <span class="metric-label">CHUNKS INDEXED</span>
+                        <span class="metric-value" id="metricChunks">0</span>
                     </div>
                     <div class="metric">
-                        <span class="metric-label">RELEVANCE SCORE</span>
-                        <span class="metric-value">84%</span>
+                        <span class="metric-label">GRAPH NODES</span>
+                        <span class="metric-value" id="metricNodes">0</span>
                     </div>
                 </div>
             </aside>
@@ -62,56 +83,32 @@
                 <!-- Analysis Section -->
                 <div class="analysis-section">
                     <div class="analysis-header">
-                        <h2>STANDARD RAG OUTPUT</h2>
-                        <h2 class="graphrag-title">GRAPHRAG ENGINE</h2>
+                        <h2>CROSS-SYSTEM COMPARISON</h2>
                     </div>
 
-                    <div class="analysis-content">
-                        <p class="analysis-text">
-                            Project Alpha relies heavily on several key suppliers. The primary dependency is 
-                            <strong>NexaCorp</strong> for microprocessors, which assembled in the Taiwan 
-                            facility. Additionally, lithium-ion cells are sourced from <strong>Vertex 
-                            Energy</strong>. There have been noted delays in the assembly pipeline requires both 
-                            components before final stage integration can begin. Risk factors include standard 
-                            supply chain disruptions and transit delays.
-                        </p>
-
-                        <div class="insights-box">
-                            <h4>PRIMARY TIER-1 DEPENDENCIES:</h4>
-                            <ul class="dependencies-list">
-                                <li><strong class="node-label">[NODE: NexaCorp]</strong> (Microprocessors) → Status: Stable</li>
-                                <li><strong class="node-label">[NODE: Vertex Energy]</strong> (Lithium Cells) → Status: <span class="alert-delayed">ALERT: DELAYED</span></li>
-                            </ul>
-
-                            <h4>CRITICAL PATH ANALYSIS:</h4>
-                            <p class="critical-text">
-                                The delay at <strong class="critical-node">[NODE: Vertex Energy]</strong> directly 
-                                blocks <strong class="critical-relation">[RELATION: Assembly Phase 3]</strong> at 
-                                <strong class="critical-node">[NODE: Taiwan Facility]</strong>.
-                            </p>
-
-                            <h4>SECONDARY IMPACT:</h4>
-                            <p class="secondary-text">
-                                Because Phase 3 is blocked, downstream deliveries to 
-                                <strong class="critical-node">[NODE: European Distribution]</strong> will miss the 
-                                Q3 deadline by an estimated 14 days.
-                            </p>
-
-                            <h4>RECOMMENDED ACTION:</h4>
-                            <p class="recommended-text">
-                                Reroute <strong class="critical-node">[NODE: Lithium Cells]</strong> sourcing to 
-                                <strong class="critical-node">[NODE: Alt-Power Inc]</strong> (Korea) to bypass the 
-                                logistical bottleneck.
-                            </p>
+                    <div class="comparison-grid">
+                        <div class="ans-column" id="llmOnlyCol">
+                            <h4>🤖 LLM ONLY</h4>
+                            <div class="ans-text" id="llmOnlyText">Enter a query to begin analysis...</div>
                         </div>
+                        <div class="ans-column" id="ragCol">
+                            <h4>🔍 BASIC RAG</h4>
+                            <div class="ans-text" id="ragText">Awaiting document indexing...</div>
+                        </div>
+                        <div class="ans-column" id="graphRagCol">
+                            <h4>🧠 GRAPHRAG</h4>
+                            <div class="ans-text" id="graphRagText">Awaiting graph construction...</div>
+                        </div>
+                    </div>
 
-                        <div class="query-prompt">
-                            > "Analyze the supply chain dependencies for Project Alpha."
+                    <div class="query-section" style="margin-top: 30px;">
+                        <div class="query-prompt" id="currentQueryLabel">
+                            > Awaiting user input...
                         </div>
 
                         <div class="query-input-box">
-                            <input type="text" class="query-input" placeholder="Query the network...">
-                            <button class="query-btn">⚡</button>
+                            <input type="text" class="query-input" id="queryInput" placeholder="Ask a complex question about your documents...">
+                            <button class="query-btn" id="queryBtn">⚡</button>
                         </div>
                     </div>
                 </div>
@@ -123,20 +120,12 @@
                     <canvas id="graphCanvas"></canvas>
                     <div class="graph-legend">
                         <div class="legend-item">
-                            <div class="legend-color supplier"></div>
-                            <span>Supplier</span>
-                        </div>
-                        <div class="legend-item">
                             <div class="legend-color facility"></div>
-                            <span>Facility</span>
+                            <span>Concept</span>
                         </div>
                         <div class="legend-item">
-                            <div class="legend-color distribution"></div>
-                            <span>Distribution</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color delayed"></div>
-                            <span>Delayed</span>
+                            <div class="legend-color alternative"></div>
+                            <span>Relationship</span>
                         </div>
                     </div>
                 </div>
