@@ -27,22 +27,21 @@ app.add_middleware(
 )
 
 # API Configuration
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+def get_api_key():
+    """Dynamically read the active Gemini API key from environment or local .env fallback"""
+    key = os.getenv("GEMINI_API_KEY")
+    if not key and os.path.exists(".env"):
+        try:
+            with open(".env", "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip().startswith("GEMINI_API_KEY="):
+                        return line.strip().split("=", 1)[1].strip().strip('"').strip("'")
+        except Exception:
+            pass
+    return key or "REPLACE_WITH_YOUR_NEW_KEY"
 
-# Local fallback loading from Git-ignored .env file
-if not GEMINI_API_KEY and os.path.exists(".env"):
-    try:
-        with open(".env", "r", encoding="utf-8") as f:
-            for line in f:
-                if line.strip().startswith("GEMINI_API_KEY="):
-                    GEMINI_API_KEY = line.strip().split("=", 1)[1].strip().strip('"').strip("'")
-    except Exception:
-        pass
-
-if not GEMINI_API_KEY:
-    GEMINI_API_KEY = "REPLACE_WITH_YOUR_NEW_KEY"
-
-genai.configure(api_key=GEMINI_API_KEY)
+# Configure initially with fallback
+genai.configure(api_key=get_api_key())
 
 # THE ONLY WORKING MODEL FOR THIS KEY BASED ON LIVE TESTING
 PRIMARY_MODEL = "models/gemini-flash-latest"
@@ -227,6 +226,9 @@ async def query(request: QueryRequest):
     retrieved = [c["chunks"][idx] for idx in I[0] if idx != -1 and idx < len(c["chunks"])]
     context = "\n\n".join([f"[Source: {ch['source']}, Page: {ch['page']+1}] {ch['text']}" for ch in retrieved])
     
+    # Configure API key dynamically on every query to pick up changes instantly
+    active_key = get_api_key()
+    genai.configure(api_key=active_key)
     model = genai.GenerativeModel(PRIMARY_MODEL)
     
     # 2. PIPELINE A: BASIC RAG SYNTHESIS
