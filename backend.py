@@ -33,6 +33,21 @@ genai.configure(api_key=GEMINI_API_KEY)
 # THE ONLY WORKING MODEL FOR THIS KEY BASED ON LIVE TESTING
 PRIMARY_MODEL = "models/gemini-flash-latest"
 
+def generate_with_retry(model, prompt, retries=3, delay=5):
+    """Helper function to automatically retry queries with exponential backoff on 429 rate limits"""
+    for i in range(retries):
+        try:
+            resp = model.generate_content(prompt)
+            return resp.text
+        except Exception as e:
+            err_msg = str(e)
+            if "429" in err_msg or "ResourceExhausted" in err_msg or "quota" in err_msg.lower():
+                if i < retries - 1:
+                    # Exponential wait: 5s, 10s, 15s...
+                    time.sleep(delay * (i + 1))
+                    continue
+            raise e
+
 # Models
 class QueryRequest(BaseModel):
     query: str
@@ -254,14 +269,12 @@ async def query(request: QueryRequest):
     """
     
     try:
-        rag_resp = model.generate_content(basic_rag_prompt)
-        basic_rag_answer = rag_resp.text
+        basic_rag_answer = generate_with_retry(model, basic_rag_prompt)
     except Exception as e:
         basic_rag_answer = f"⚠️ Basic RAG Error: {str(e)}"
         
     try:
-        grag_resp = model.generate_content(graph_rag_prompt)
-        graphrag_answer = grag_resp.text
+        graphrag_answer = generate_with_retry(model, graph_rag_prompt)
     except Exception as e:
         graphrag_answer = f"⚠️ GraphRAG Error: {str(e)}"
         
