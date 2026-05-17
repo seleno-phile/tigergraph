@@ -27,7 +27,7 @@ app.add_middleware(
 )
 
 # API Configuration
-GEMINI_API_KEY = "AIzaSyCPUjqfpmHmCr91W6-TENoi64LL7vDnpKE"
+GEMINI_API_KEY = "AIzaSyAu5Wi7sx9L-61jszyf14gPbH3MoeZkEmQ"
 genai.configure(api_key=GEMINI_API_KEY)
 
 # THE ONLY WORKING MODEL FOR THIS KEY BASED ON LIVE TESTING
