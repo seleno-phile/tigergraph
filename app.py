@@ -1008,6 +1008,7 @@ if prompt := st.chat_input("Ask a complex question about your documents..."):
                     
                     # 2. Detailed Insights
                     viz_data = result.get("viz_data") or result.get("debug_info", {}).get("viz_data")
+                    msg_hash = abs(hash(final_answer or ""))
                     with st.expander("🛠️ Retrieval & Reasoning Paths"):
                         if viz_data:
                             tab1, tab2, tab3 = st.tabs(["🔍 Basic RAG", "🧠 GraphRAG Path", "🌐 Knowledge Explorer"])
