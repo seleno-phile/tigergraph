@@ -27,7 +27,21 @@ app.add_middleware(
 )
 
 # API Configuration
-GEMINI_API_KEY = "AIzaSyAu5Wi7sx9L-61jszyf14gPbH3MoeZkEmQ"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# Local fallback loading from Git-ignored .env file
+if not GEMINI_API_KEY and os.path.exists(".env"):
+    try:
+        with open(".env", "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip().startswith("GEMINI_API_KEY="):
+                    GEMINI_API_KEY = line.strip().split("=", 1)[1].strip().strip('"').strip("'")
+    except Exception:
+        pass
+
+if not GEMINI_API_KEY:
+    GEMINI_API_KEY = "REPLACE_WITH_YOUR_NEW_KEY"
+
 genai.configure(api_key=GEMINI_API_KEY)
 
 # THE ONLY WORKING MODEL FOR THIS KEY BASED ON LIVE TESTING
