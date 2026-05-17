@@ -221,69 +221,6 @@ async def query(request: QueryRequest):
     start = time.time()
     c = collections[request.collection_id]
     
-    # Live Demo Interceptor to guarantee absolute stability and high-fidelity output for video recording
-    q_lower = request.query.lower()
-    if any(w in q_lower for w in ["project", "resume", "explain", "sign speak", "ulcer", "chatbot"]):
-        llm_answer = (
-            "I do not have access to your local resume document in my baseline training weights. "
-            "However, based on general engineering knowledge:\n\n"
-            "1. **Sign Language Recognition:** Typically built using camera feeds and hand-landmark detection (like Google MediaPipe) to map human hand gestures to synthesized speech sequences.\n"
-            "2. **Diabetic Foot Ulcer (DFU) Detection:** Generically utilizes deep neural networks (like CNNs or single-shot detection frameworks) to segment and classify diabetic foot lesions from photographic data.\n"
-            "3. **Healthcare Conversational Interfaces:** Standard text-driven conversational tools built with simple scripting languages to route patient inquiries to symptomatic tables.\n\n"
-            "*Note: To review the exact specifications of the candidate's resume projects, please see the Basic RAG or TigerGraph GraphRAG pipelines.*"
-        )
-        
-        rag_answer = (
-            "[Source: resume.docx, Page: 1]\n"
-            "The uploaded document contains a 'PROJECTS' section detailing three core engineering initiatives:\n\n"
-            "1. **Sign Speak AI - Real-time Sign Language Recognition:** Developed using OpenCV, MediaPipe, TensorFlow, and PyTorch to translate gestures to speech. Integrated text-to-speech and emergency sign recognition.\n"
-            "2. **Diabetic Foot Ulcer Detection:** A machine learning model using YOLO for detection and classification of diabetic foot ulcers with 95% accuracy.\n"
-            "3. **Healthcare Chatbot:** An AI-driven chatbot engineered with Python, HTML, and CSS to deliver personalized health guidance."
-        )
-        
-        graphrag_answer = (
-            "### 🧠 TigerGraph GraphRAG Multi-Hop Systems Synthesis\n\n"
-            "Based on the active biomedical knowledge graph traversed on TigerGraph (depth-3 exploration: `📄 Document` -> `🧩 Chunk` -> `🧠 Traversed Concept`), the candidate has built three highly sophisticated biomedical and accessibility systems. By traversing relationship links `[MENTIONS]` and `[CO_OCCURS]`, ORACLE-GR has synthesized a comprehensive engineering breakdown of the resume projects:\n\n"
-            "| Project Title | Core Tech Stack | Primary Achievement / Metrics | Clinical & Social Impact |\n"
-            "| :--- | :--- | :--- | :--- |\n"
-            "| **Sign Speak AI** | OpenCV, MediaPipe, TensorFlow, PyTorch | Real-time translation of sign gestures into synthesized vocal speech | Drastically improves communication accessibility for speech-impaired individuals; features emergency trigger alerts. |\n"
-            "| **Diabetic Foot Ulcer Detection** | YOLO (You Only Look Once), Computer Vision | Achieved **95% detection and classification accuracy** | Directly supports clinical practitioners in automated DFU monitoring, early classification, and therapeutic management. |\n"
-            "| **Healthcare Chatbot** | Python, HTML, CSS, NLP | Interactive patient guidance & symptom navigation | Delivers immediate, personalized symptom guidance and clinical routing. |\n\n"
-            "---\n\n"
-            "#### 🛠️ Comprehensive Systems-Engineering Breakdown:\n\n"
-            "##### 1. Sign Speak AI: Real-time Sign Language Recognition\n"
-            "* **System Architecture:** Combines real-time computer vision frame ingestion (OpenCV) with robust hand-gesture keypoint extraction (MediaPipe). Keypoints are fed into deep-learning classification architectures (TensorFlow/PyTorch) to map gesture sequences to semantic tokens.\n"
-            "* **Key Innovation:** Integrated a text-to-speech (TTS) engine for instant vocalization and implemented a high-priority **emergency sign recognition feature** that triggers automated distress signals, significantly increasing safety margins for non-verbal users in medical emergencies.\n\n"
-            "##### 2. Diabetic Foot Ulcer Detection System\n"
-            "* **System Architecture:** Built using the state-of-the-art YOLO (You Only Look Once) object detection framework. This enables clinical-grade, high-throughput, real-time localized classification of ulcer boundaries and severity scores directly from standard camera feeds.\n"
-            "* **Key Innovation:** Achieved a validated **95% detection accuracy**, directly solving a critical diagnostic bottleneck in diabetic patient monitoring and helping doctors prevent severe complications through automated tracking.\n\n"
-            "##### 3. Healthcare Chatbot\n"
-            "* **System Architecture:** Engineered using a sleek, responsive frontend (HTML, CSS) coupled with a solid Python NLP service backend designed to handle patient symptom mapping and metadata lookup.\n"
-            "* **Key Innovation:** Provides a lightweight, accessible portal for personalized health guidance, increasing clinic workflow efficiency by triaging routine inquiries.\n\n"
-            "---\n\n"
-            "#### ⚡ Traversed Graph Reasoning Paths (NotebookLM Style):\n"
-            "* **Path 1 (Accessibility Path):** `📄 resume.docx` -> `🧩 Chunk_Projects_1` -> `🧠 Sign Speak AI` -> `🧠 MediaPipe` -> `🧠 OpenCV` -> `🧠 PyTorch`\n"
-            "  * *Traversed Inference:* The sign recognition pipeline combines real-time hand-keypoint tracking (MediaPipe) with deep-learning frame translation (TensorFlow/PyTorch) to generate live vocal streams.\n"
-            "* **Path 2 (Diagnostic Path):** `📄 resume.docx` -> `🧩 Chunk_Projects_2` -> `🧠 Diabetic Foot Ulcer` -> `🧠 YOLO` -> `🧠 95% Accuracy`\n"
-            "  * *Traversed Inference:* Leverages single-shot detection (YOLO) to achieve clinical-grade classification speed and a highly validated 95% accuracy score."
-        )
-        
-        return QueryResponse(
-            llm_answer=llm_answer,
-            rag_answer=rag_answer,
-            graphrag_answer=graphrag_answer,
-            processing_time=0.28,
-            rag_chunks_used=3,
-            graph_nodes_used=8,
-            collection_id=request.collection_id,
-            debug_info={
-                "processing_time": 0.28,
-                "rag_chunks_used": 3,
-                "graph_nodes_used": 8,
-                "traversed_entities": ["Sign Speak AI", "YOLO", "OpenCV", "MediaPipe", "TensorFlow", "PyTorch", "Diabetic Foot Ulcer", "Healthcare Chatbot"]
-            }
-        )
-        
     if not c["faiss_index"] or len(c["chunks"]) == 0:
         raise HTTPException(status_code=400, detail="No indexed chunks available in this collection.")
     
