@@ -14,6 +14,10 @@ import fitz  # PyMuPDF
 from sentence_transformers import SentenceTransformer
 import google.generativeai as genai
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from dotenv import load_dotenv
+
+# Load local environment keys
+load_dotenv()
 
 # Initialize FastAPI app
 app = FastAPI(title="Optimized Gemini GraphRAG Backend")
@@ -27,7 +31,7 @@ app.add_middleware(
 )
 
 # API Configuration
-GEMINI_API_KEY = "AIzaSyCr30OAno1BNSRJYxUN5NWG7jUTk0LED3o"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyCr30OAno1BNSRJYxUN5NWG7jUTk0LED3o")
 genai.configure(api_key=GEMINI_API_KEY)
 
 # THE ONLY WORKING MODEL FOR THIS KEY BASED ON LIVE TESTING
@@ -37,6 +41,8 @@ PRIMARY_MODEL = "models/gemini-flash-latest"
 class QueryRequest(BaseModel):
     query: str
     collection_id: str
+    api_key: Optional[str] = None
+    model: Optional[str] = None
 
 class QueryResponse(BaseModel):
     llm_answer: str
@@ -198,7 +204,10 @@ async def query(request: QueryRequest):
     retrieved = [c["chunks"][idx] for idx in I[0] if idx != -1 and idx < len(c["chunks"])]
     context = "\n\n".join([f"[Source: {ch['source']}, Page: {ch['page']+1}] {ch['text']}" for ch in retrieved])
     
-    model = genai.GenerativeModel(PRIMARY_MODEL)
+    active_key = request.api_key or os.getenv("GEMINI_API_KEY") or GEMINI_API_KEY
+    genai.configure(api_key=active_key)
+    active_model = request.model or os.getenv("GEMINI_MODEL") or PRIMARY_MODEL
+    model = genai.GenerativeModel(active_model)
     
     # 2. PIPELINE A: BASIC RAG SYNTHESIS
     basic_rag_prompt = f"""
