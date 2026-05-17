@@ -220,7 +220,7 @@ css_style = f"""
 st.markdown(css_style, unsafe_allow_html=True)
 
 # Backend API configuration
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = "http://127.0.0.1:8000"
 
 # Initialize session state
 if 'messages' not in st.session_state:
@@ -364,87 +364,275 @@ if 'global_graph' in st.session_state and st.session_state.global_graph:
         import json
         graph_json = json.dumps(st.session_state.global_graph)
         html_content = f"""
-        <div style="position: relative;" class="network-container">
-            <div id="globalnetwork" style="width: 100%; height: 600px; background-color: #0b0f19;"></div>
-            <div id="detailpanel" style="position: absolute; top: 20px; right: 20px; width: 280px; max-height: 560px; 
-                background: rgba(11, 15, 25, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(0, 212, 255, 0.3); 
-                border-radius: 12px; color: white; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-                overflow-y: auto; display: none; z-index: 100; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px;">
-                <h4 style="margin-top: 0; color: #00d4ff; font-family: 'Space Grotesk', sans-serif; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">🔍 Node Intelligence</h4>
-                <div id="detailcontent" style="line-height: 1.6;">Select a node to inspect...</div>
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+            body {{
+                margin: 0;
+                padding: 0;
+                background-color: #060913;
+                font-family: 'Plus Jakarta Sans', sans-serif;
+                overflow: hidden;
+            }}
+            .hud-wrapper {{
+                position: relative;
+                width: 100%;
+                height: 600px;
+                background: radial-gradient(circle at 50% 50%, #0c152b 0%, #060913 100%);
+                border: 1px solid rgba(0, 212, 255, 0.15);
+                border-radius: 16px;
+                box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), inset 0 0 30px rgba(0, 212, 255, 0.05);
+                overflow: hidden;
+            }}
+            #globalnetwork {{
+                width: 100%;
+                height: 100%;
+                background-color: transparent;
+            }}
+            /* Pulsing Status Badge */
+            .status-badge {{
+                position: absolute;
+                top: 20px;
+                left: 20px;
+                z-index: 10;
+                background: rgba(9, 14, 26, 0.85);
+                backdrop-filter: blur(12px);
+                border: 1px solid rgba(0, 212, 255, 0.2);
+                padding: 8px 16px;
+                border-radius: 30px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+                pointer-events: none;
+            }}
+            .status-dot {{
+                width: 8px;
+                height: 8px;
+                background-color: #00ffd4;
+                border-radius: 50%;
+                box-shadow: 0 0 10px #00ffd4;
+                animation: pulse 2s infinite;
+            }}
+            @keyframes pulse {{
+                0% {{ transform: scale(0.9); opacity: 0.6; }}
+                50% {{ transform: scale(1.2); opacity: 1; box-shadow: 0 0 14px #00ffd4; }}
+                100% {{ transform: scale(0.9); opacity: 0.6; }}
+            }}
+            .status-text {{
+                color: #f8fafc;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 1.5px;
+                text-transform: uppercase;
+                font-family: 'Space Grotesk', sans-serif;
+            }}
+            /* Floating Topology Legend */
+            .legend-card {{
+                position: absolute;
+                bottom: 20px;
+                left: 20px;
+                z-index: 10;
+                background: rgba(9, 14, 26, 0.85);
+                backdrop-filter: blur(12px);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                padding: 12px 18px;
+                border-radius: 12px;
+                box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                pointer-events: none;
+            }}
+            .legend-title {{
+                color: #8c9ba5;
+                font-size: 10px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 2px;
+                font-family: 'Space Grotesk', sans-serif;
+            }}
+            .legend-item {{
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                color: #cbd5e1;
+                font-size: 11px;
+                font-weight: 500;
+            }}
+            .legend-color {{
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+            }}
+            /* Detail Panel */
+            .detail-panel {{
+                position: absolute;
+                top: 20px;
+                right: 20px;
+                width: 260px;
+                max-height: 520px;
+                background: rgba(9, 14, 26, 0.88);
+                backdrop-filter: blur(16px);
+                border: 1px solid rgba(0, 212, 255, 0.25);
+                border-radius: 14px;
+                color: #cbd5e1;
+                padding: 20px;
+                box-shadow: 0 15px 40px rgba(0,0,0,0.6);
+                overflow-y: auto;
+                display: none;
+                z-index: 100;
+                transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                font-size: 12px;
+            }}
+            .panel-header {{
+                margin-top: 0;
+                color: #00d4ff;
+                font-family: 'Space Grotesk', sans-serif;
+                font-size: 14px;
+                font-weight: 600;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+                padding-bottom: 8px;
+                margin-bottom: 12px;
+            }}
+        </style>
+        </head>
+        <body>
+            <div class="hud-wrapper">
+                <div class="status-badge">
+                    <div class="status-dot"></div>
+                    <div class="status-text">⚡ Global Knowledge Topology Map</div>
+                </div>
+                
+                <div class="legend-card">
+                    <div class="legend-title">Topology Key</div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #00ffd4; box-shadow: 0 0 6px #00ffd4;"></div>
+                        <span>📄 Document Source</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #7000ff; box-shadow: 0 0 6px #7000ff;"></div>
+                        <span>🧩 Text Chunk Node</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #00d4ff; box-shadow: 0 0 6px #00d4ff;"></div>
+                        <span>🧠 Semantic Entity</span>
+                    </div>
+                </div>
+                
+                <div id="globalnetwork"></div>
+                
+                <div id="detailpanel" class="detail-panel">
+                    <h4 class="panel-header">🔍 Node Intelligence</h4>
+                    <div id="detailcontent">Select a node to inspect...</div>
+                </div>
             </div>
-        </div>
-        <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-        <script type="text/javascript">
-            var data = {graph_json};
-            var container = document.getElementById('globalnetwork');
-            var panel = document.getElementById('detailpanel');
-            var content = document.getElementById('detailcontent');
             
-            var options = {{
-                nodes: {{
-                    shape: 'dot',
-                    font: {{ size: 13, color: '#e2e8f0', face: 'Plus Jakarta Sans' }},
-                    borderWidth: 2,
-                    shadow: {{ enabled: true, color: 'rgba(0,0,0,0.5)', size: 10, x: 0, y: 4 }}
-                }},
-                edges: {{
-                    width: 1.5,
-                    font: {{ size: 9, align: 'middle', color: '#8c9ba5', face: 'Plus Jakarta Sans' }},
-                    color: {{ color: 'rgba(255, 255, 255, 0.15)', highlight: '#00d4ff', hover: 'rgba(0, 212, 255, 0.4)' }},
-                    arrows: {{ to: {{ enabled: true, scaleFactor: 0.6 }} }},
-                    smooth: {{ type: 'cubicBezier', roundness: 0.5 }}
-                }},
-                groups: {{
-                    document: {{
-                        color: {{ background: '#00d4ff', border: '#00b4d8', highlight: {{ background: '#00f0ff', border: '#00d4ff' }} }},
-                        size: 25
+            <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+            <script type="text/javascript">
+                var data = {graph_json};
+                var container = document.getElementById('globalnetwork');
+                var panel = document.getElementById('detailpanel');
+                var content = document.getElementById('detailcontent');
+                
+                var options = {{
+                    nodes: {{
+                        shape: 'dot',
+                        font: {{ 
+                            size: 11, 
+                            color: '#ffffff', 
+                            face: 'Plus Jakarta Sans',
+                            strokeWidth: 2,
+                            strokeColor: '#0b0f19'
+                        }},
+                        borderWidth: 2,
+                        shadow: {{ enabled: true, color: 'rgba(0,0,0,0.4)', size: 8, x: 0, y: 3 }}
                     }},
-                    chunk: {{
-                        color: {{ background: '#7000ff', border: '#5a00d6', highlight: {{ background: '#8f00ff', border: '#7000ff' }} }},
-                        size: 18
+                    edges: {{
+                        width: 1,
+                        font: {{ 
+                            size: 8, 
+                            color: '#cccccc', 
+                            face: 'Plus Jakarta Sans', 
+                            align: 'middle', 
+                            strokeWidth: 0 
+                        }},
+                        color: {{ 
+                            color: 'rgba(255, 255, 255, 0.15)', 
+                            highlight: '#00d4ff', 
+                            hover: 'rgba(0, 212, 255, 0.3)' 
+                        }},
+                        arrows: {{ to: {{ enabled: true, scaleFactor: 0.5 }} }},
+                        smooth: {{ enabled: false }}
                     }},
-                    entity: {{
-                        color: {{ background: '#ff007b', border: '#d60067', highlight: {{ background: '#ff3399', border: '#ff007b' }} }},
-                        size: 12
+                    groups: {{
+                        document: {{
+                            color: {{ 
+                                background: '#00ffd4', 
+                                border: '#00b4d8', 
+                                highlight: {{ background: '#33ffdf', border: '#00ffd4' }} 
+                            }},
+                            size: 24
+                        }},
+                        chunk: {{
+                            color: {{ 
+                                background: '#7000ff', 
+                                border: '#5a00d6', 
+                                highlight: {{ background: '#8f00ff', border: '#7000ff' }} 
+                            }},
+                            size: 18
+                        }},
+                        entity: {{
+                            color: {{ 
+                                background: '#00d4ff', 
+                                border: '#008bb2', 
+                                highlight: {{ background: '#33f0ff', border: '#00d4ff' }} 
+                            }},
+                            size: 14
+                        }}
+                    }},
+                    physics: {{
+                        solver: 'forceAtlas2Based',
+                        forceAtlas2Based: {{
+                            gravitationalConstant: -80,
+                            centralGravity: 0.015,
+                            springLength: 120,
+                            springConstant: 0.08,
+                            damping: 0.4,
+                            avoidOverlap: 0.5
+                        }},
+                        stabilization: {{ iterations: 150 }}
+                    }},
+                    interaction: {{ hover: true, tooltipDelay: 150 }}
+                }};
+                var network = new vis.Network(container, data, options);
+                
+                network.on("click", function (params) {{
+                    if (params.nodes.length > 0) {{
+                        var nodeId = params.nodes[0];
+                        var nodeData = data.nodes.find(n => n.id === nodeId);
+                        panel.style.display = 'block';
+                        
+                        var groupLabel = nodeData.group ? nodeData.group.toUpperCase() : "UNKNOWN";
+                        var badgeColor = nodeData.group === 'document' ? '#00d4ff' : (nodeData.group === 'chunk' ? '#7000ff' : '#00d4ff');
+                        
+                        var html = "<span style='display:inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; background:" + badgeColor + "; color:white; margin-bottom:12px;'>" + groupLabel + "</span><br>";
+                        html += "<b style='color:#e2e8f0; font-size:14px;'>" + nodeId + "</b><br><br>";
+                        
+                        var details = nodeData.title || "No further descriptive metadata available.";
+                        html += "<div style='color:#a0aec0; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); padding:10px; border-radius:6px; max-height:300px; overflow-y:auto;'>" + details + "</div>";
+                        
+                        content.innerHTML = html;
+                    }} else {{
+                        panel.style.display = 'none';
                     }}
-                }},
-                physics: {{
-                    solver: 'forceAtlas2Based',
-                    forceAtlas2Based: {{
-                        gravitationalConstant: -80,
-                        centralGravity: 0.015,
-                        springLength: 120,
-                        springConstant: 0.08,
-                        damping: 0.4
-                    }},
-                    stabilization: {{ iterations: 150 }}
-                }},
-                interaction: {{ hover: true }}
-            }};
-            var network = new vis.Network(container, data, options);
-            
-            network.on("click", function (params) {{
-                if (params.nodes.length > 0) {{
-                    var nodeId = params.nodes[0];
-                    var nodeData = data.nodes.find(n => n.id === nodeId);
-                    panel.style.display = 'block';
-                    
-                    var groupLabel = nodeData.group ? nodeData.group.toUpperCase() : "UNKNOWN";
-                    var badgeColor = nodeData.group === 'document' ? '#00d4ff' : (nodeData.group === 'chunk' ? '#7000ff' : '#ff007b');
-                    
-                    var html = "<span style='display:inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; background:" + badgeColor + "; color:white; margin-bottom:12px;'>" + groupLabel + "</span><br>";
-                    html += "<b style='color:#e2e8f0; font-size:14px;'>" + nodeId + "</b><br><br>";
-                    
-                    var details = nodeData.title || "No further descriptive metadata available.";
-                    html += "<div style='color:#a0aec0; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); padding:10px; border-radius:6px; max-height:300px; overflow-y:auto;'>" + details + "</div>";
-                    
-                    content.innerHTML = html;
-                }} else {{
-                    panel.style.display = 'none';
-                }}
-            }});
-        </script>
+                }});
+            </script>
+        </body>
+        </html>
         """
         st.components.v1.html(html_content, height=620)
 st.markdown("---")
@@ -470,78 +658,275 @@ for message in st.session_state.messages:
                         graph_json = json.dumps(viz_data)
                         msg_hash = abs(hash(message['content']))
                         html_content = f"""
-                        <div style="position: relative;" class="network-container">
-                            <div id="mynetwork-{msg_hash}" style="width: 100%; height: 500px; background-color: #0b0f19;"></div>
-                            <div id="detailpanel-{msg_hash}" style="position: absolute; top: 15px; right: 15px; width: 230px; max-height: 460px; 
-                                background: rgba(11, 15, 25, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(0, 212, 255, 0.3); 
-                                border-radius: 10px; color: white; padding: 15px; box-shadow: 0 8px 25px rgba(0,0,0,0.5);
-                                overflow-y: auto; display: none; z-index: 100; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px;">
-                                <h5 style="margin-top: 0; color: #00d4ff; font-family: 'Space Grotesk', sans-serif; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px;">🔍 Concept Intelligence</h5>
-                                <div id="detailcontent-{msg_hash}" style="line-height: 1.5;">Select a node to inspect...</div>
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                        <style>
+                            @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+                            body {{
+                                margin: 0;
+                                padding: 0;
+                                background-color: #060913;
+                                font-family: 'Plus Jakarta Sans', sans-serif;
+                                overflow: hidden;
+                            }}
+                            .hud-wrapper {{
+                                position: relative;
+                                width: 100%;
+                                height: 500px;
+                                background: radial-gradient(circle at 50% 50%, #0c152b 0%, #060913 100%);
+                                border: 1px solid rgba(0, 212, 255, 0.15);
+                                border-radius: 16px;
+                                box-shadow: 0 15px 40px rgba(0, 0, 0, 0.8), inset 0 0 25px rgba(0, 212, 255, 0.05);
+                                overflow: hidden;
+                            }}
+                            #mynetwork-{msg_hash} {{
+                                width: 100%;
+                                height: 100%;
+                                background-color: transparent;
+                            }}
+                            /* Pulsing Status Badge */
+                            .status-badge {{
+                                position: absolute;
+                                top: 15px;
+                                left: 15px;
+                                z-index: 10;
+                                background: rgba(9, 14, 26, 0.85);
+                                backdrop-filter: blur(10px);
+                                border: 1px solid rgba(0, 212, 255, 0.2);
+                                padding: 6px 12px;
+                                border-radius: 20px;
+                                display: flex;
+                                align-items: center;
+                                gap: 8px;
+                                box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+                                pointer-events: none;
+                            }}
+                            .status-dot {{
+                                width: 6px;
+                                height: 6px;
+                                background-color: #00d4ff;
+                                border-radius: 50%;
+                                box-shadow: 0 0 8px #00d4ff;
+                                animation: pulse 2s infinite;
+                            }}
+                            @keyframes pulse {{
+                                0% {{ transform: scale(0.9); opacity: 0.6; }}
+                                50% {{ transform: scale(1.2); opacity: 1; box-shadow: 0 0 12px #00d4ff; }}
+                                100% {{ transform: scale(0.9); opacity: 0.6; }}
+                            }}
+                            .status-text {{
+                                color: #f8fafc;
+                                font-size: 9px;
+                                font-weight: 700;
+                                letter-spacing: 1px;
+                                text-transform: uppercase;
+                                font-family: 'Space Grotesk', sans-serif;
+                            }}
+                            /* Floating Topology Legend */
+                            .legend-card {{
+                                position: absolute;
+                                bottom: 15px;
+                                left: 15px;
+                                z-index: 10;
+                                background: rgba(9, 14, 26, 0.85);
+                                backdrop-filter: blur(10px);
+                                border: 1px solid rgba(255, 255, 255, 0.08);
+                                padding: 10px 14px;
+                                border-radius: 10px;
+                                box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+                                display: flex;
+                                flex-direction: column;
+                                gap: 6px;
+                                pointer-events: none;
+                            }}
+                            .legend-title {{
+                                color: #8c9ba5;
+                                font-size: 9px;
+                                font-weight: 600;
+                                text-transform: uppercase;
+                                letter-spacing: 0.5px;
+                                margin-bottom: 2px;
+                                font-family: 'Space Grotesk', sans-serif;
+                            }}
+                            .legend-item {{
+                                display: flex;
+                                align-items: center;
+                                gap: 6px;
+                                color: #cbd5e1;
+                                font-size: 10px;
+                                font-weight: 500;
+                            }}
+                            .legend-color {{
+                                width: 7px;
+                                height: 7px;
+                                border-radius: 50%;
+                            }}
+                            /* Detail Panel */
+                            .detail-panel {{
+                                position: absolute;
+                                top: 15px;
+                                right: 15px;
+                                width: 220px;
+                                max-height: 440px;
+                                background: rgba(9, 14, 26, 0.88);
+                                backdrop-filter: blur(16px);
+                                border: 1px solid rgba(0, 212, 255, 0.25);
+                                border-radius: 12px;
+                                color: #cbd5e1;
+                                padding: 15px;
+                                box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+                                overflow-y: auto;
+                                display: none;
+                                z-index: 100;
+                                transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                                font-size: 11px;
+                            }}
+                            .panel-header {{
+                                margin-top: 0;
+                                color: #00d4ff;
+                                font-family: 'Space Grotesk', sans-serif;
+                                font-size: 13px;
+                                font-weight: 600;
+                                border-bottom: 1px solid rgba(255,255,255,0.1);
+                                padding-bottom: 6px;
+                                margin-bottom: 10px;
+                            }}
+                        </style>
+                        </head>
+                        <body>
+                            <div class="hud-wrapper">
+                                <div class="status-badge">
+                                    <div class="status-dot"></div>
+                                    <div class="status-text">⚡ Session Context Topology Map</div>
+                                </div>
+                                
+                                <div class="legend-card">
+                                    <div class="legend-title">Topology Key</div>
+                                    <div class="legend-item">
+                                        <div class="legend-color" style="background: #00ffd4; box-shadow: 0 0 5px #00ffd4;"></div>
+                                        <span>📄 Document</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <div class="legend-color" style="background: #7000ff; box-shadow: 0 0 5px #7000ff;"></div>
+                                        <span>🧩 Text Chunk</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <div class="legend-color" style="background: #00d4ff; box-shadow: 0 0 5px #00d4ff;"></div>
+                                        <span>🧠 Traversed Concept</span>
+                                    </div>
+                                </div>
+                                
+                                <div id="mynetwork-{msg_hash}"></div>
+                                
+                                <div id="detailpanel-{msg_hash}" class="detail-panel">
+                                    <h4 class="panel-header">🔍 Concept Intelligence</h4>
+                                    <div id="detailcontent-{msg_hash}">Select a node to inspect...</div>
+                                </div>
                             </div>
-                        </div>
-                        <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-                        <script type="text/javascript">
-                            var data = {graph_json};
-                            var container = document.getElementById('mynetwork-{msg_hash}');
-                            var panel = document.getElementById('detailpanel-{msg_hash}');
-                            var content = document.getElementById('detailcontent-{msg_hash}');
                             
-                            var options = {{
-                                nodes: {{
-                                    shape: 'dot',
-                                    font: {{ size: 12, color: '#e2e8f0', face: 'Plus Jakarta Sans' }},
-                                    borderWidth: 2,
-                                    shadow: {{ enabled: true, color: 'rgba(0,0,0,0.4)', size: 8, x: 0, y: 3 }}
-                                }},
-                                edges: {{
-                                    width: 1.5,
-                                    font: {{ size: 8, align: 'middle', color: '#8c9ba5', face: 'Plus Jakarta Sans' }},
-                                    color: {{ color: 'rgba(255, 255, 255, 0.15)', highlight: '#00d4ff', hover: 'rgba(0, 212, 255, 0.4)' }},
-                                    arrows: {{ to: {{ enabled: true, scaleFactor: 0.6 }} }},
-                                    smooth: {{ type: 'cubicBezier', roundness: 0.5 }}
-                                }},
-                                groups: {{
-                                    document: {{ color: {{ background: '#00d4ff', border: '#00b4d8' }}, size: 22 }},
-                                    chunk: {{ color: {{ background: '#7000ff', border: '#5a00d6' }}, size: 16 }},
-                                    entity: {{ color: {{ background: '#ff007b', border: '#d60067' }}, size: 10 }}
-                                }},
-                                physics: {{
-                                    solver: 'forceAtlas2Based',
-                                    forceAtlas2Based: {{
-                                        gravitationalConstant: -60,
-                                        centralGravity: 0.02,
-                                        springLength: 100,
-                                        springConstant: 0.08,
-                                        damping: 0.4
+                            <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+                            <script type="text/javascript">
+                                var data = {graph_json};
+                                var container = document.getElementById('mynetwork-{msg_hash}');
+                                var panel = document.getElementById('detailpanel-{msg_hash}');
+                                var content = document.getElementById('detailcontent-{msg_hash}');
+                                
+                                var options = {{
+                                    nodes: {{
+                                        shape: 'dot',
+                                        font: {{ 
+                                            size: 10, 
+                                            color: '#ffffff', 
+                                            face: 'Plus Jakarta Sans',
+                                            strokeWidth: 2,
+                                            strokeColor: '#0b0f19'
+                                        }},
+                                        borderWidth: 2,
+                                        shadow: {{ enabled: true, color: 'rgba(0,0,0,0.4)', size: 6, x: 0, y: 2 }}
                                     }},
-                                    stabilization: {{ iterations: 100 }}
-                                }},
-                                interaction: {{ hover: true }}
-                            }};
-                            var network = new vis.Network(container, data, options);
-                            
-                            network.on("click", function (params) {{
-                                if (params.nodes.length > 0) {{
-                                    var nodeId = params.nodes[0];
-                                    var nodeData = data.nodes.find(n => n.id === nodeId);
-                                    panel.style.display = 'block';
-                                    
-                                    var groupLabel = nodeData.group ? nodeData.group.toUpperCase() : "UNKNOWN";
-                                    var badgeColor = nodeData.group === 'document' ? '#00d4ff' : (nodeData.group === 'chunk' ? '#7000ff' : '#ff007b');
-                                    
-                                    var html = "<span style='display:inline-block; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: bold; background:" + badgeColor + "; color:white; margin-bottom:8px;'>" + groupLabel + "</span><br>";
-                                    html += "<b style='color:#e2e8f0; font-size:12px;'>" + nodeId + "</b><br><br>";
-                                    
-                                    var details = nodeData.title || "No details available.";
-                                    html += "<div style='color:#a0aec0; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); padding:8px; border-radius:4px; max-height:220px; overflow-y:auto;'>" + details + "</div>";
-                                    
-                                    content.innerHTML = html;
-                                }} else {{
-                                    panel.style.display = 'none';
-                                }}
-                            }});
-                        </script>
+                                    edges: {{
+                                        width: 1,
+                                        font: {{ 
+                                            size: 7, 
+                                            color: '#cccccc', 
+                                            face: 'Plus Jakarta Sans', 
+                                            align: 'middle', 
+                                            strokeWidth: 0 
+                                        }},
+                                        color: {{ 
+                                            color: 'rgba(255, 255, 255, 0.15)', 
+                                            highlight: '#00d4ff', 
+                                            hover: 'rgba(0, 212, 255, 0.3)' 
+                                        }},
+                                        arrows: {{ to: {{ enabled: true, scaleFactor: 0.5 }} }},
+                                        smooth: {{ enabled: false }}
+                                    }},
+                                    groups: {{
+                                        document: {{
+                                            color: {{ 
+                                                background: '#00ffd4', 
+                                                border: '#00b4d8', 
+                                                highlight: {{ background: '#33ffdf', border: '#00ffd4' }} 
+                                            }},
+                                            size: 22
+                                        }},
+                                        chunk: {{
+                                            color: {{ 
+                                                background: '#7000ff', 
+                                                border: '#5a00d6', 
+                                                highlight: {{ background: '#8f00ff', border: '#7000ff' }} 
+                                            }},
+                                            size: 16
+                                        }},
+                                        entity: {{
+                                            color: {{ 
+                                                background: '#00d4ff', 
+                                                border: '#008bb2', 
+                                                highlight: {{ background: '#33f0ff', border: '#00d4ff' }} 
+                                            }},
+                                            size: 12
+                                        }}
+                                    }},
+                                    physics: {{
+                                        solver: 'forceAtlas2Based',
+                                        forceAtlas2Based: {{
+                                            gravitationalConstant: -70,
+                                            centralGravity: 0.02,
+                                            springLength: 100,
+                                            springConstant: 0.08,
+                                            damping: 0.4,
+                                            avoidOverlap: 0.5
+                                        }},
+                                        stabilization: {{ iterations: 120 }}
+                                    }},
+                                    interaction: {{ hover: true, tooltipDelay: 150 }}
+                                }};
+                                var network = new vis.Network(container, data, options);
+                                
+                                network.on("click", function (params) {{
+                                    if (params.nodes.length > 0) {{
+                                        var nodeId = params.nodes[0];
+                                        var nodeData = data.nodes.find(n => n.id === nodeId);
+                                        panel.style.display = 'block';
+                                        
+                                        var groupLabel = nodeData.group ? nodeData.group.toUpperCase() : "UNKNOWN";
+                                        var badgeColor = nodeData.group === 'document' ? '#00d4ff' : (nodeData.group === 'chunk' ? '#7000ff' : '#00d4ff');
+                                        
+                                        var html = "<span style='display:inline-block; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: bold; background:" + badgeColor + "; color:white; margin-bottom:8px;'>" + groupLabel + "</span><br>";
+                                        html += "<b style='color:#e2e8f0; font-size:12px;'>" + nodeId + "</b><br><br>";
+                                        
+                                        var details = nodeData.title || "No details available.";
+                                        html += "<div style='color:#a0aec0; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); padding:8px; border-radius:4px; max-height:220px; overflow-y:auto;'>" + details + "</div>";
+                                        
+                                        content.innerHTML = html;
+                                    }} else {{
+                                        panel.style.display = 'none';
+                                    }}
+                                }});
+                            </script>
+                        </body>
+                        </html>
                         """
                         st.components.v1.html(html_content, height=520)
 
@@ -581,81 +966,276 @@ if prompt := st.chat_input("Ask a complex question about your documents..."):
                         if viz_data:
                             with tab3:
                                 import json
-                                graph_json = json.dumps(viz_data)
-                                msg_hash = abs(hash(final_answer))
                                 html_content = f"""
-                                <div style="position: relative;" class="network-container">
-                                    <div id="mynetwork-{msg_hash}" style="width: 100%; height: 500px; background-color: #0b0f19;"></div>
-                                    <div id="detailpanel-{msg_hash}" style="position: absolute; top: 15px; right: 15px; width: 230px; max-height: 460px; 
-                                        background: rgba(11, 15, 25, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(0, 212, 255, 0.3); 
-                                        border-radius: 10px; color: white; padding: 15px; box-shadow: 0 8px 25px rgba(0,0,0,0.5);
-                                        overflow-y: auto; display: none; z-index: 100; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px;">
-                                        <h5 style="margin-top: 0; color: #00d4ff; font-family: 'Space Grotesk', sans-serif; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px;">🔍 Concept Intelligence</h5>
-                                        <div id="detailcontent-{msg_hash}" style="line-height: 1.5;">Select a node to inspect...</div>
+                                <!DOCTYPE html>
+                                <html>
+                                <head>
+                                <style>
+                                    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+                                    body {{
+                                        margin: 0;
+                                        padding: 0;
+                                        background-color: #060913;
+                                        font-family: 'Plus Jakarta Sans', sans-serif;
+                                        overflow: hidden;
+                                    }}
+                                    .hud-wrapper {{
+                                        position: relative;
+                                        width: 100%;
+                                        height: 500px;
+                                        background: radial-gradient(circle at 50% 50%, #0c152b 0%, #060913 100%);
+                                        border: 1px solid rgba(0, 212, 255, 0.15);
+                                        border-radius: 16px;
+                                        box-shadow: 0 15px 40px rgba(0, 0, 0, 0.8), inset 0 0 25px rgba(0, 212, 255, 0.05);
+                                        overflow: hidden;
+                                    }}
+                                    #mynetwork-{msg_hash} {{
+                                        width: 100%;
+                                        height: 100%;
+                                        background-color: transparent;
+                                    }}
+                                    /* Pulsing Status Badge */
+                                    .status-badge {{
+                                        position: absolute;
+                                        top: 15px;
+                                        left: 15px;
+                                        z-index: 10;
+                                        background: rgba(9, 14, 26, 0.85);
+                                        backdrop-filter: blur(10px);
+                                        border: 1px solid rgba(0, 212, 255, 0.2);
+                                        padding: 6px 12px;
+                                        border-radius: 20px;
+                                        display: flex;
+                                        align-items: center;
+                                        gap: 8px;
+                                        box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+                                        pointer-events: none;
+                                    }}
+                                    .status-dot {{
+                                        width: 6px;
+                                        height: 6px;
+                                        background-color: #00d4ff;
+                                        border-radius: 50%;
+                                        box-shadow: 0 0 8px #00d4ff;
+                                        animation: pulse 2s infinite;
+                                    }}
+                                    @keyframes pulse {{
+                                        0% {{ transform: scale(0.9); opacity: 0.6; }}
+                                        50% {{ transform: scale(1.2); opacity: 1; box-shadow: 0 0 12px #00d4ff; }}
+                                        100% {{ transform: scale(0.9); opacity: 0.6; }}
+                                    }}
+                                    .status-text {{
+                                        color: #f8fafc;
+                                        font-size: 9px;
+                                        font-weight: 700;
+                                        letter-spacing: 1px;
+                                        text-transform: uppercase;
+                                        font-family: 'Space Grotesk', sans-serif;
+                                    }}
+                                    /* Floating Topology Legend */
+                                    .legend-card {{
+                                        position: absolute;
+                                        bottom: 15px;
+                                        left: 15px;
+                                        z-index: 10;
+                                        background: rgba(9, 14, 26, 0.85);
+                                        backdrop-filter: blur(10px);
+                                        border: 1px solid rgba(255, 255, 255, 0.08);
+                                        padding: 10px 14px;
+                                        border-radius: 10px;
+                                        box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+                                        display: flex;
+                                        flex-direction: column;
+                                        gap: 6px;
+                                        pointer-events: none;
+                                    }}
+                                    .legend-title {{
+                                        color: #8c9ba5;
+                                        font-size: 9px;
+                                        font-weight: 600;
+                                        text-transform: uppercase;
+                                        letter-spacing: 0.5px;
+                                        margin-bottom: 2px;
+                                        font-family: 'Space Grotesk', sans-serif;
+                                    }}
+                                    .legend-item {{
+                                        display: flex;
+                                        align-items: center;
+                                        gap: 6px;
+                                        color: #cbd5e1;
+                                        font-size: 10px;
+                                        font-weight: 500;
+                                    }}
+                                    .legend-color {{
+                                        width: 7px;
+                                        height: 7px;
+                                        border-radius: 50%;
+                                    }}
+                                    /* Detail Panel */
+                                    .detail-panel {{
+                                        position: absolute;
+                                        top: 15px;
+                                        right: 15px;
+                                        width: 220px;
+                                        max-height: 440px;
+                                        background: rgba(9, 14, 26, 0.88);
+                                        backdrop-filter: blur(16px);
+                                        border: 1px solid rgba(0, 212, 255, 0.25);
+                                        border-radius: 12px;
+                                        color: #cbd5e1;
+                                        padding: 15px;
+                                        box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+                                        overflow-y: auto;
+                                        display: none;
+                                        z-index: 100;
+                                        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                                        font-size: 11px;
+                                    }}
+                                    .panel-header {{
+                                        margin-top: 0;
+                                        color: #00d4ff;
+                                        font-family: 'Space Grotesk', sans-serif;
+                                        font-size: 13px;
+                                        font-weight: 600;
+                                        border-bottom: 1px solid rgba(255,255,255,0.1);
+                                        padding-bottom: 6px;
+                                        margin-bottom: 10px;
+                                    }}
+                                </style>
+                                </head>
+                                <body>
+                                    <div class="hud-wrapper">
+                                        <div class="status-badge">
+                                            <div class="status-dot"></div>
+                                            <div class="status-text">⚡ Query Path Concept Explorer</div>
+                                        </div>
+                                        
+                                        <div class="legend-card">
+                                            <div class="legend-title">Topology Key</div>
+                                            <div class="legend-item">
+                                                <div class="legend-color" style="background: #00ffd4; box-shadow: 0 0 5px #00ffd4;"></div>
+                                                <span>📄 Document</span>
+                                            </div>
+                                            <div class="legend-item">
+                                                <div class="legend-color" style="background: #7000ff; box-shadow: 0 0 5px #7000ff;"></div>
+                                                <span>🧩 Text Chunk</span>
+                                            </div>
+                                            <div class="legend-item">
+                                                <div class="legend-color" style="background: #00d4ff; box-shadow: 0 0 5px #00d4ff;"></div>
+                                                <span>🧠 Traversed Concept</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div id="mynetwork-{msg_hash}"></div>
+                                        
+                                        <div id="detailpanel-{msg_hash}" class="detail-panel">
+                                            <h4 class="panel-header">🔍 Concept Intelligence</h4>
+                                            <div id="detailcontent-{msg_hash}">Select a node to inspect...</div>
+                                        </div>
                                     </div>
-                                </div>
-                                <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-                                <script type="text/javascript">
-                                    var data = {graph_json};
-                                    var container = document.getElementById('mynetwork-{msg_hash}');
-                                    var panel = document.getElementById('detailpanel-{msg_hash}');
-                                    var content = document.getElementById('detailcontent-{msg_hash}');
                                     
-                                    var options = {{
-                                        nodes: {{
-                                            shape: 'dot',
-                                            font: {{ size: 12, color: '#e2e8f0', face: 'Plus Jakarta Sans' }},
-                                            borderWidth: 2,
-                                            shadow: {{ enabled: true, color: 'rgba(0,0,0,0.4)', size: 8, x: 0, y: 3 }}
-                                        }},
-                                        edges: {{
-                                            width: 1.5,
-                                            font: {{ size: 8, align: 'middle', color: '#8c9ba5', face: 'Plus Jakarta Sans' }},
-                                            color: {{ color: 'rgba(255, 255, 255, 0.15)', highlight: '#00d4ff', hover: 'rgba(0, 212, 255, 0.4)' }},
-                                            arrows: {{ to: {{ enabled: true, scaleFactor: 0.6 }} }},
-                                            smooth: {{ type: 'cubicBezier', roundness: 0.5 }}
-                                        }},
-                                        groups: {{
-                                            document: {{ color: {{ background: '#00d4ff', border: '#00b4d8' }}, size: 22 }},
-                                            chunk: {{ color: {{ background: '#7000ff', border: '#5a00d6' }}, size: 16 }},
-                                            entity: {{ color: {{ background: '#ff007b', border: '#d60067' }}, size: 10 }}
-                                        }},
-                                        physics: {{
-                                            solver: 'forceAtlas2Based',
-                                            forceAtlas2Based: {{
-                                                gravitationalConstant: -60,
-                                                centralGravity: 0.02,
-                                                springLength: 100,
-                                                springConstant: 0.08,
-                                                damping: 0.4
+                                    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+                                    <script type="text/javascript">
+                                        var data = {graph_json};
+                                        var container = document.getElementById('mynetwork-{msg_hash}');
+                                        var panel = document.getElementById('detailpanel-{msg_hash}');
+                                        var content = document.getElementById('detailcontent-{msg_hash}');
+                                        
+                                        var options = {{
+                                            nodes: {{
+                                                shape: 'dot',
+                                                font: {{ 
+                                                    size: 10, 
+                                                    color: '#ffffff', 
+                                                    face: 'Plus Jakarta Sans',
+                                                    strokeWidth: 2,
+                                                    strokeColor: '#0b0f19'
+                                                }},
+                                                borderWidth: 2,
+                                                shadow: {{ enabled: true, color: 'rgba(0,0,0,0.4)', size: 6, x: 0, y: 2 }}
                                             }},
-                                            stabilization: {{ iterations: 100 }}
-                                        }},
-                                        interaction: {{ hover: true }}
-                                    }};
-                                    var network = new vis.Network(container, data, options);
-                                    
-                                    network.on("click", function (params) {{
-                                        if (params.nodes.length > 0) {{
-                                            var nodeId = params.nodes[0];
-                                            var nodeData = data.nodes.find(n => n.id === nodeId);
-                                            panel.style.display = 'block';
-                                            
-                                            var groupLabel = nodeData.group ? nodeData.group.toUpperCase() : "UNKNOWN";
-                                            var badgeColor = nodeData.group === 'document' ? '#00d4ff' : (nodeData.group === 'chunk' ? '#7000ff' : '#ff007b');
-                                            
-                                            var html = "<span style='display:inline-block; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: bold; background:" + badgeColor + "; color:white; margin-bottom:8px;'>" + groupLabel + "</span><br>";
-                                            html += "<b style='color:#e2e8f0; font-size:12px;'>" + nodeId + "</b><br><br>";
-                                            
-                                            var details = nodeData.title || "No details available.";
-                                            html += "<div style='color:#a0aec0; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); padding:8px; border-radius:4px; max-height:220px; overflow-y:auto;'>" + details + "</div>";
-                                            
-                                            content.innerHTML = html;
-                                        }} else {{
-                                            panel.style.display = 'none';
-                                        }}
-                                    }});
-                                </script>
+                                            edges: {{
+                                                width: 1,
+                                                font: {{ 
+                                                    size: 7, 
+                                                    color: '#cccccc', 
+                                                    face: 'Plus Jakarta Sans', 
+                                                    align: 'middle', 
+                                                    strokeWidth: 0 
+                                                }},
+                                                color: {{ 
+                                                    color: 'rgba(255, 255, 255, 0.15)', 
+                                                    highlight: '#00d4ff', 
+                                                    hover: 'rgba(0, 212, 255, 0.3)' 
+                                                }},
+                                                arrows: {{ to: {{ enabled: true, scaleFactor: 0.5 }} }},
+                                                smooth: {{ enabled: false }}
+                                            }},
+                                            groups: {{
+                                                document: {{
+                                                    color: {{ 
+                                                        background: '#00ffd4', 
+                                                        border: '#00b4d8', 
+                                                        highlight: {{ background: '#33ffdf', border: '#00ffd4' }} 
+                                                    }},
+                                                    size: 22
+                                                }},
+                                                chunk: {{
+                                                    color: {{ 
+                                                        background: '#7000ff', 
+                                                        border: '#5a00d6', 
+                                                        highlight: {{ background: '#8f00ff', border: '#7000ff' }} 
+                                                    }},
+                                                    size: 16
+                                                }},
+                                                entity: {{
+                                                    color: {{ 
+                                                        background: '#00d4ff', 
+                                                        border: '#008bb2', 
+                                                        highlight: {{ background: '#33f0ff', border: '#00d4ff' }} 
+                                                    }},
+                                                    size: 12
+                                                }}
+                                            }},
+                                            physics: {{
+                                                solver: 'forceAtlas2Based',
+                                                forceAtlas2Based: {{
+                                                    gravitationalConstant: -70,
+                                                    centralGravity: 0.02,
+                                                    springLength: 100,
+                                                    springConstant: 0.08,
+                                                    damping: 0.4,
+                                                    avoidOverlap: 0.5
+                                                }},
+                                                stabilization: {{ iterations: 120 }}
+                                            }},
+                                            interaction: {{ hover: true, tooltipDelay: 150 }}
+                                        }};
+                                        var network = new vis.Network(container, data, options);
+                                        
+                                        network.on("click", function (params) {{
+                                            if (params.nodes.length > 0) {{
+                                                var nodeId = params.nodes[0];
+                                                var nodeData = data.nodes.find(n => n.id === nodeId);
+                                                panel.style.display = 'block';
+                                                
+                                                var groupLabel = nodeData.group ? nodeData.group.toUpperCase() : "UNKNOWN";
+                                                var badgeColor = nodeData.group === 'document' ? '#00d4ff' : (nodeData.group === 'chunk' ? '#7000ff' : '#00d4ff');
+                                                
+                                                var html = "<span style='display:inline-block; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: bold; background:" + badgeColor + "; color:white; margin-bottom:8px;'>" + groupLabel + "</span><br>";
+                                                html += "<b style='color:#e2e8f0; font-size:12px;'>" + nodeId + "</b><br><br>";
+                                                
+                                                var details = nodeData.title || "No details available.";
+                                                html += "<div style='color:#a0aec0; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); padding:8px; border-radius:4px; max-height:220px; overflow-y:auto;'>" + details + "</div>";
+                                                
+                                                content.innerHTML = html;
+                                            }} else {{
+                                                panel.style.display = 'none';
+                                            }}
+                                        }});
+                                    </script>
+                                </body>
+                                </html>
                                 """
                                 st.components.v1.html(html_content, height=520)
                     
