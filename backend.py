@@ -12,7 +12,8 @@ import numpy as np
 import faiss
 import fitz  # PyMuPDF
 from sentence_transformers import SentenceTransformer
-import google.generativeai as genai
+from google import genai
+from google.genai.errors import APIError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Initialize FastAPI app
@@ -40,18 +41,50 @@ def get_api_key():
             pass
     return key or "REPLACE_WITH_YOUR_NEW_KEY"
 
-# Configure initially with fallback
-genai.configure(api_key=get_api_key())
+def get_gemini_model():
+    """Dynamically read the active Gemini model from environment or local .env fallback"""
+    model = os.getenv("GEMINI_MODEL")
+    if not model and os.path.exists(".env"):
+        try:
+            with open(".env", "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip().startswith("GEMINI_MODEL="):
+                        return line.strip().split("=", 1)[1].strip().strip('"').strip("'")
+        except Exception:
+            pass
+    return model or "gemini-2.5-flash"
 
-# THE ONLY WORKING MODEL FOR THIS KEY BASED ON LIVE TESTING
-PRIMARY_MODEL = "gemini-1.5-flash"
+def validate_gemini_configuration(api_key: Optional[str], model_name: str):
+    """Startup or first-request validation step that checks configured model supports text generation"""
+    if not api_key or api_key == "REPLACE_WITH_YOUR_NEW_KEY":
+        raise HTTPException(
+            status_code=400,
+            detail="Configuration Error: Gemini API Key is missing or not configured. Please supply a valid key via the sidebar or environment."
+        )
+    
+    try:
+        client = genai.Client(api_key=api_key)
+        # Dry-run validation call to verify model capability and key status
+        client.models.generate_content(
+            model=model_name,
+            contents="Test validation query",
+            config={"max_output_tokens": 1}
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Configuration/Initialization Error: The configured model '{model_name}' or API key is invalid/unsupported. Upstream error details: {str(e)}"
+        )
 
-def generate_with_retry(model, prompt, retries=3, delay=5):
+def generate_with_retry(client, model_name, prompt, retries=3, delay=5):
     """Helper function to automatically retry queries with exponential backoff on 429 rate limits"""
     for i in range(retries):
         try:
-            resp = model.generate_content(prompt)
-            return resp.text
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt
+            )
+            return response.text
         except Exception as e:
             err_msg = str(e)
             if "429" in err_msg or "ResourceExhausted" in err_msg or "quota" in err_msg.lower():
@@ -66,6 +99,7 @@ class QueryRequest(BaseModel):
     query: str
     collection_id: str
     api_key: Optional[str] = None
+    model: Optional[str] = None
 
 class QueryResponse(BaseModel):
     llm_answer: str
@@ -229,11 +263,16 @@ async def query(request: QueryRequest):
     retrieved = [c["chunks"][idx] for idx in I[0] if idx != -1 and idx < len(c["chunks"])]
     context = "\n\n".join([f"[Source: {ch['source']}, Page: {ch['page']+1}] {ch['text']}" for ch in retrieved])
     
-    # Configure API key dynamically on every query to pick up changes instantly
+    # Configure API key and model dynamically on every query to pick up changes instantly
     session_key = c.get("api_key")
     active_key = request.api_key or session_key or get_api_key()
-    genai.configure(api_key=active_key)
-    model = genai.GenerativeModel(PRIMARY_MODEL)
+    active_model = request.model or get_gemini_model()
+    
+    # Startup/first-request validation step: checks configured model and key
+    validate_gemini_configuration(active_key, active_model)
+    
+    # Instantiate supported Google Gen AI client path
+    client = genai.Client(api_key=active_key)
     
     # 2. PIPELINE A: BASIC RAG SYNTHESIS
     basic_rag_prompt = f"""
@@ -289,14 +328,20 @@ async def query(request: QueryRequest):
     """
     
     try:
-        basic_rag_answer = generate_with_retry(model, basic_rag_prompt)
+        basic_rag_answer = generate_with_retry(client, active_model, basic_rag_prompt)
     except Exception as e:
-        basic_rag_answer = f"⚠️ Basic RAG Error: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Gemini API Basic RAG Synthesis Failed: {str(e)}"
+        )
         
     try:
-        graphrag_answer = generate_with_retry(model, graph_rag_prompt)
+        graphrag_answer = generate_with_retry(client, active_model, graph_rag_prompt)
     except Exception as e:
-        graphrag_answer = f"⚠️ GraphRAG Error: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Gemini API GraphRAG Synthesis Failed: {str(e)}"
+        )
         
     # The primary answer displayed in chat bubbles is the top-tier GraphRAG answer!
     llm_answer = graphrag_answer

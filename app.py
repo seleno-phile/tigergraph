@@ -232,12 +232,16 @@ if 'documents' not in st.session_state:
 if 'debug_data' not in st.session_state:
     st.session_state.debug_data = {}
 
-def upload_files(files, progress_bar):
+def upload_files(files, progress_bar, api_key: Optional[str] = None):
     try:
         progress_bar.info("📡 Connecting to GraphRAG Backend...")
         files_data = [("files", (f.name, f.read(), f.type)) for f in files]
         
-        params = {"collection_id": st.session_state.collection_id} if st.session_state.collection_id else {}
+        params = {}
+        if st.session_state.collection_id:
+            params["collection_id"] = st.session_state.collection_id
+        if api_key:
+            params["api_key"] = api_key
             
         response = requests.post(f"{API_BASE_URL}/upload", files=files_data, params=params)
         if response.status_code != 200: return {"error": f"Error: {response.text}"}
@@ -273,12 +277,29 @@ def upload_files(files, progress_bar):
     except Exception as e:
         return {"error": str(e)}
 
-def query_backend(query: str):
+def query_backend(query: str, api_key: Optional[str] = None, model: Optional[str] = None):
     try:
+        payload = {
+            "query": query,
+            "collection_id": st.session_state.collection_id
+        }
+        if api_key:
+            payload["api_key"] = api_key
+        if model:
+            payload["model"] = model
+            
         response = requests.post(
             f"{API_BASE_URL}/query",
-            json={"query": query, "collection_id": st.session_state.collection_id}
+            json=payload
         )
+        
+        if response.status_code != 200:
+            try:
+                err_detail = response.json().get("detail", response.text)
+            except Exception:
+                err_detail = response.text
+            return {"error": err_detail, "status_code": response.status_code}
+            
         return response.json()
     except Exception as e:
         return {"error": str(e)}
@@ -308,7 +329,8 @@ with st.sidebar:
         progress_area = st.sidebar.empty()
         progress_area.info("📡 Connecting to GraphRAG Backend...")
         
-        res = upload_files(uploaded_files, progress_area)
+        api_override_val = st.session_state.get("gemini_api_key_override", "")
+        res = upload_files(uploaded_files, progress_area, api_key=api_override_val)
         progress_area.empty()
         
         if "error" not in res:
@@ -318,6 +340,22 @@ with st.sidebar:
             st.sidebar.success("✅ Intelligence Base Ready!")
         else:
             st.sidebar.error(res["error"])
+
+    st.markdown("---")
+    st.subheader("🔑 Client Configuration")
+    st.text_input(
+        "Gemini API Key",
+        type="password",
+        value=os.getenv("GEMINI_API_KEY", ""),
+        help="Overrides local credentials and environment configuration",
+        key="gemini_api_key_override"
+    )
+    st.text_input(
+        "Gemini Model",
+        value=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+        help="Target text generation model (e.g. gemini-2.5-flash, gemini-1.5-flash)",
+        key="gemini_model_override"
+    )
 
     st.markdown("---")
     if st.session_state.collection_id:
@@ -640,14 +678,17 @@ st.markdown("---")
 # Display Chat History
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-        if message["role"] == "assistant":
-            with st.expander("🛠️ Retrieval & Reasoning Paths"):
-                viz_data = message.get("viz_data")
-                if viz_data:
-                    tab1, tab2, tab3 = st.tabs(["🔍 Basic RAG", "🧠 GraphRAG Path", "🌐 Knowledge Explorer"])
-                else:
-                    tab1, tab2 = st.tabs(["🔍 Basic RAG", "🧠 GraphRAG Path"])
+        if message.get("is_error", False):
+            st.markdown(message["content"], unsafe_allow_html=True)
+        else:
+            st.markdown(message["content"])
+            if message["role"] == "assistant":
+                with st.expander("🛠️ Retrieval & Reasoning Paths"):
+                    viz_data = message.get("viz_data")
+                    if viz_data:
+                        tab1, tab2, tab3 = st.tabs(["🔍 Basic RAG", "🧠 GraphRAG Path", "🌐 Knowledge Explorer"])
+                    else:
+                        tab1, tab2 = st.tabs(["🔍 Basic RAG", "🧠 GraphRAG Path"])
                 
                 with tab1: st.markdown(message.get("rag_answer", ""))
                 with tab2: st.markdown(message.get("graphrag_answer", ""))
@@ -943,7 +984,9 @@ if prompt := st.chat_input("Ask a complex question about your documents..."):
         # Assistant Response
         with st.chat_message("assistant"):
             with st.spinner("🤖 Synthesizing multi-hop answer..."):
-                result = query_backend(prompt)
+                api_override = st.session_state.get("gemini_api_key_override", "")
+                model_override = st.session_state.get("gemini_model_override", "gemini-2.5-flash")
+                result = query_backend(prompt, api_key=api_override, model=model_override)
                 
                 if "error" not in result:
                     st.session_state.debug_data["last_query"] = result.get("debug_info", {})
@@ -1248,7 +1291,33 @@ if prompt := st.chat_input("Ask a complex question about your documents..."):
                         "viz_data": viz_data
                     })
                 else:
-                    st.error(f"Backend Failure: {result['error']}")
+                    error_msg = result["error"]
+                    status_code = result.get("status_code", 500)
+                    
+                    error_html = f"""
+                    <div style="background: rgba(255, 75, 75, 0.08); border: 1px solid rgba(255, 75, 75, 0.25); border-radius: 12px; padding: 20px; margin: 10px 0; font-family: 'Plus Jakarta Sans', sans-serif;">
+                        <h4 style="color: #ff4b4b; margin-top: 0; font-family: 'Space Grotesk', sans-serif;">⚠️ GraphRAG Backend Configuration Failure (HTTP {status_code})</h4>
+                        <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.6; margin-bottom: 12px;">
+                            The query synthesis pipeline encountered a <b>Gemini Configuration or Upstream Provider Error</b>:
+                        </p>
+                        <code style="display: block; background: rgba(0, 0, 0, 0.4); color: #ff8888; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 0.85rem; word-break: break-all; margin-bottom: 15px;">
+                            {error_msg}
+                        </code>
+                        <h5 style="color: #00d4ff; margin-bottom: 8px;">💡 Actionable Troubleshooting Guidance:</h5>
+                        <ul style="color: #cbd5e1; font-size: 0.9rem; margin-left: 20px; line-height: 1.5; padding-left: 0;">
+                            <li><b>Verify API Key:</b> Ensure you have entered a valid, active API key in the sidebar under "Client Configuration" or configured <code>GEMINI_API_KEY</code> in your environment or <code>.env</code> file.</li>
+                            <li><b>Check Model Availability:</b> Make sure your Google AI Studio account supports the selected model (e.g. <code>gemini-2.5-flash</code>). You can switch models dynamically in the sidebar.</li>
+                            <li><b>API Rate Limits & Quotas:</b> If you see "429 Too Many Requests", wait a few moments or upgrade your free tier quota on Google Developer portal.</li>
+                        </ul>
+                    </div>
+                    """
+                    
+                    st.markdown(error_html, unsafe_allow_html=True)
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": error_html,
+                        "is_error": True
+                    })
 
 # Footer
 st.markdown("---")
