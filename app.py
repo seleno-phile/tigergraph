@@ -330,8 +330,7 @@ with st.sidebar:
         progress_area = st.sidebar.empty()
         progress_area.info("📡 Connecting to GraphRAG Backend...")
         
-        api_override_val = st.session_state.get("gemini_api_key_override", "")
-        res = upload_files(uploaded_files, progress_area, api_key=api_override_val)
+        res = upload_files(uploaded_files, progress_area)
         progress_area.empty()
         
         if "error" not in res:
@@ -341,22 +340,6 @@ with st.sidebar:
             st.sidebar.success("✅ Intelligence Base Ready!")
         else:
             st.sidebar.error(res["error"])
-
-    st.markdown("---")
-    st.subheader("🔑 Client Configuration")
-    st.text_input(
-        "Gemini API Key",
-        type="password",
-        value=os.getenv("GEMINI_API_KEY", ""),
-        help="Overrides local credentials and environment configuration",
-        key="gemini_api_key_override"
-    )
-    st.text_input(
-        "Gemini Model",
-        value=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
-        help="Target text generation model (e.g. gemini-2.5-flash, gemini-1.5-flash)",
-        key="gemini_model_override"
-    )
 
     st.markdown("---")
     if st.session_state.collection_id:
@@ -995,9 +978,7 @@ if prompt := st.chat_input("Ask a complex question about your documents..."):
         # Assistant Response
         with st.chat_message("assistant"):
             with st.spinner("🤖 Synthesizing multi-hop answer..."):
-                api_override = st.session_state.get("gemini_api_key_override", "")
-                model_override = st.session_state.get("gemini_model_override", "gemini-2.5-flash")
-                result = query_backend(prompt, api_key=api_override, model=model_override)
+                result = query_backend(prompt)
                 
                 if "error" not in result:
                     st.session_state.debug_data["last_query"] = result.get("debug_info", {})
