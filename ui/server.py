@@ -34,15 +34,15 @@ def run_server(port=PORT):
         print(f"=" * 60)
         print(f"Supply Chain Intelligence Dashboard")
         print(f"=" * 60)
-        print(f"\n✓ Server running at: http://localhost:{port}")
-        print(f"✓ Serving files from: {DIRECTORY}")
+        print(f"\n[OK] Server running at: http://localhost:{port}")
+        print(f"[OK] Serving files from: {DIRECTORY}")
         print(f"\nPress Ctrl+C to stop the server\n")
         print(f"=" * 60)
         
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
-            print(f"\n\n✓ Server stopped gracefully")
+            print(f"\n\n[OK] Server stopped gracefully")
             sys.exit(0)
 
 if __name__ == "__main__":
