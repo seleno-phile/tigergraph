@@ -53,6 +53,43 @@ def get_gemini_model():
         except Exception:
             pass
     return model or "gemini-2.5-flash"
+def handle_gemini_exception(e: Exception, model_name: str):
+    """Categorize and raise clear, actionable HTTPExceptions based on Gemini client or upstream network errors."""
+    err_msg = str(e)
+    
+    # 1. Socket/DNS / getaddrinfo resolution errors
+    if "getaddrinfo" in err_msg or "socket.gaierror" in err_msg or "gaierror" in err_msg or "11001" in err_msg or "DNS" in err_msg or "connection" in err_msg.lower():
+        raise HTTPException(
+            status_code=503,
+            detail="Network/DNS Error: Cannot resolve or reach Google Gemini API (generativelanguage.googleapis.com). Please verify your internet connection, active VPN, or system proxy configuration."
+        )
+        
+    # 2. Permission Denied / Authorization Errors (401, 403)
+    if "401" in err_msg or "403" in err_msg or "API key not valid" in err_msg.lower() or "permissiondenied" in err_msg.lower() or "unauthorized" in err_msg.lower() or "key" in err_msg.lower():
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid API Key: The provided Gemini API Key is unauthorized, invalid, or scanner-revoked. Please generate a fresh, active API key from Google AI Studio."
+        )
+        
+    # 3. Model Not Found / Unsupported Model (404)
+    if "404" in err_msg or "not found" in err_msg.lower() or "notfound" in err_msg.lower() or "unsupported" in err_msg.lower():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unsupported Model Name: The configured model '{model_name}' was not found or is unsupported by your API key. Please switch to a supported model like 'gemini-2.5-flash' or 'gemini-1.5-flash-latest'."
+        )
+        
+    # 4. Quota Exceeded / Rate Limit (429)
+    if "429" in err_msg or "resourceexhausted" in err_msg.lower() or "quota" in err_msg.lower() or "rate limit" in err_msg.lower():
+        raise HTTPException(
+            status_code=429,
+            detail="Rate Limit / Quota Exceeded: Your Google Generative AI free-tier quota has been exhausted. Please wait 60 seconds or switch to a paid API key."
+        )
+        
+    # Fallback default
+    raise HTTPException(
+        status_code=500,
+        detail=f"Configuration/Initialization Error: The configured model '{model_name}' or API key returned an upstream error. Technical details: {err_msg}"
+    )
 
 def validate_gemini_configuration(api_key: Optional[str], model_name: str):
     """Startup or first-request validation step that checks configured model supports text generation"""
@@ -71,10 +108,7 @@ def validate_gemini_configuration(api_key: Optional[str], model_name: str):
             config={"max_output_tokens": 1}
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Configuration/Initialization Error: The configured model '{model_name}' or API key is invalid/unsupported. Upstream error details: {str(e)}"
-        )
+        handle_gemini_exception(e, model_name)
 
 def generate_with_retry(client, model_name, prompt, retries=3, delay=5):
     """Helper function to automatically retry queries with exponential backoff on 429 rate limits"""
