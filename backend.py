@@ -44,7 +44,7 @@ def get_api_key():
 genai.configure(api_key=get_api_key())
 
 # THE ONLY WORKING MODEL FOR THIS KEY BASED ON LIVE TESTING
-PRIMARY_MODEL = "models/gemini-flash-latest"
+PRIMARY_MODEL = "models/gemini-1.5-flash"
 
 def generate_with_retry(model, prompt, retries=3, delay=5):
     """Helper function to automatically retry queries with exponential backoff on 429 rate limits"""
