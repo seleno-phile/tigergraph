@@ -12,8 +12,7 @@ import numpy as np
 import faiss
 import fitz  # PyMuPDF
 from sentence_transformers import SentenceTransformer
-from google import genai
-from google.genai.errors import APIError
+import google.generativeai as genai
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Initialize FastAPI app
@@ -28,119 +27,16 @@ app.add_middleware(
 )
 
 # API Configuration
-def get_api_key():
-    """Dynamically read the active Gemini API key from environment or local .env fallback"""
-    key = os.getenv("GEMINI_API_KEY")
-    if not key and os.path.exists(".env"):
-        try:
-            with open(".env", "r", encoding="utf-8") as f:
-                for line in f:
-                    if line.strip().startswith("GEMINI_API_KEY="):
-                        return line.strip().split("=", 1)[1].strip().strip('"').strip("'")
-        except Exception:
-            pass
-    return key or "REPLACE_WITH_YOUR_NEW_KEY"
+GEMINI_API_KEY = "AIzaSyCr30OAno1BNSRJYxUN5NWG7jUTk0LED3o"
+genai.configure(api_key=GEMINI_API_KEY)
 
-def get_gemini_model():
-    """Dynamically read the active Gemini model from environment or local .env fallback"""
-    model = os.getenv("GEMINI_MODEL")
-    if not model and os.path.exists(".env"):
-        try:
-            with open(".env", "r", encoding="utf-8") as f:
-                for line in f:
-                    if line.strip().startswith("GEMINI_MODEL="):
-                        return line.strip().split("=", 1)[1].strip().strip('"').strip("'")
-        except Exception:
-            pass
-    return model or "gemini-2.5-flash"
-def handle_gemini_exception(e: Exception, model_name: str):
-    """Categorize and raise clear, actionable HTTPExceptions based on Gemini client or upstream network errors."""
-    err_msg = str(e)
-    
-    # 1. Socket/DNS / getaddrinfo resolution errors
-    if "getaddrinfo" in err_msg or "socket.gaierror" in err_msg or "gaierror" in err_msg or "11001" in err_msg or "DNS" in err_msg or "connection" in err_msg.lower():
-        raise HTTPException(
-            status_code=503,
-            detail="Network/DNS Error: Cannot resolve or reach Google Gemini API (generativelanguage.googleapis.com). Please verify your internet connection, active VPN, or system proxy configuration."
-        )
-        
-    # 2. Permission Denied / Authorization Errors (401, 403)
-    if "401" in err_msg or "403" in err_msg or "API key not valid" in err_msg.lower() or "permissiondenied" in err_msg.lower() or "unauthorized" in err_msg.lower() or "key" in err_msg.lower():
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid API Key: The provided Gemini API Key is unauthorized, invalid, or scanner-revoked. Please generate a fresh, active API key from Google AI Studio."
-        )
-        
-    # 3. Model Not Found / Unsupported Model (404)
-    if "404" in err_msg or "not found" in err_msg.lower() or "notfound" in err_msg.lower() or "unsupported" in err_msg.lower():
-        raise HTTPException(
-            status_code=404,
-            detail=f"Unsupported Model Name: The configured model '{model_name}' was not found or is unsupported by your API key. Please switch to a supported model like 'gemini-2.5-flash' or 'gemini-1.5-flash-latest'."
-        )
-        
-    # 4. Quota Exceeded / Rate Limit (429)
-    if "429" in err_msg or "resourceexhausted" in err_msg.lower() or "quota" in err_msg.lower() or "rate limit" in err_msg.lower():
-        raise HTTPException(
-            status_code=429,
-            detail="Rate Limit / Quota Exceeded: Your Google Generative AI free-tier quota has been exhausted. Please wait 60 seconds or switch to a paid API key."
-        )
-        
-    # Fallback default
-    raise HTTPException(
-        status_code=500,
-        detail=f"Configuration/Initialization Error: The configured model '{model_name}' or API key returned an upstream error. Technical details: {err_msg}"
-    )
-
-validated_configs = set()
-
-def validate_gemini_configuration(api_key: Optional[str], model_name: str):
-    """Startup or first-request validation step that checks configured model supports text generation, caching successful results to avoid per-query latency."""
-    if not api_key or api_key == "REPLACE_WITH_YOUR_NEW_KEY":
-        raise HTTPException(
-            status_code=400,
-            detail="Configuration Error: Gemini API Key is missing or not configured. Please supply a valid key via the sidebar or environment."
-        )
-    
-    config_cache_key = (api_key, model_name)
-    if config_cache_key in validated_configs:
-        return
-        
-    try:
-        client = genai.Client(api_key=api_key)
-        # Dry-run validation call to verify model capability and key status
-        client.models.generate_content(
-            model=model_name,
-            contents="Test validation query",
-            config={"max_output_tokens": 1}
-        )
-        validated_configs.add(config_cache_key)
-    except Exception as e:
-        handle_gemini_exception(e, model_name)
-
-def generate_with_retry(client, model_name, prompt, retries=3, delay=5):
-    """Helper function to automatically retry queries with exponential backoff on 429 rate limits"""
-    for i in range(retries):
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt
-            )
-            return response.text
-        except Exception as e:
-            err_msg = str(e)
-            if "429" in err_msg or "ResourceExhausted" in err_msg or "quota" in err_msg.lower():
-                if i < retries - 1:
-                    # Exponential wait: 5s, 10s, 15s...
-                    time.sleep(delay * (i + 1))
-                    continue
-            raise e
+# THE ONLY WORKING MODEL FOR THIS KEY BASED ON LIVE TESTING
+PRIMARY_MODEL = "models/gemini-flash-latest"
 
 # Models
 class QueryRequest(BaseModel):
     query: str
     collection_id: str
-    api_key: Optional[str] = None
-    model: Optional[str] = None
 
 class QueryResponse(BaseModel):
     llm_answer: str
@@ -151,7 +47,6 @@ class QueryResponse(BaseModel):
     graph_nodes_used: int
     collection_id: str
     debug_info: Dict[str, Any]
-    viz_data: Optional[Dict[str, Any]] = None
 
 class UploadResponse(BaseModel):
     collection_id: str
@@ -174,16 +69,14 @@ def extract_keywords(text: str) -> List[str]:
     return list(set(words))[:15]
 
 @app.post("/upload", response_model=UploadResponse)
-async def upload(collection_id: Optional[str] = None, api_key: Optional[str] = None, files: List[UploadFile] = File(...)):
+async def upload(collection_id: Optional[str] = None, files: List[UploadFile] = File(...)):
     if not collection_id: collection_id = str(uuid.uuid4())
     if collection_id not in collections:
         collections[collection_id] = {
             "docs": [], "chunks": [], "graph_nodes": {}, "graph_edges": [],
-            "embeddings": None, "faiss_index": None, "api_key": api_key
+            "embeddings": None, "faiss_index": None
         }
     c = collections[collection_id]
-    if api_key:
-        c["api_key"] = api_key
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
     all_texts = []
     
@@ -256,7 +149,7 @@ async def upload(collection_id: Optional[str] = None, api_key: Optional[str] = N
             "id": ch_id, 
             "label": f"Chunk {ch_id.split('_')[-1]}", 
             "group": "chunk",
-            "title": f"CHUNK CONTENT:\n{ch['text'][:300]}..."
+            "title": f"<b>CHUNK CONTENT:</b><br>{ch['text'][:300]}..." 
         })
         edges.append({"from": ch["source"], "to": ch_id, "label": "HAS_CHUNK"})
         chunk_kws = extract_keywords(ch["text"])
@@ -267,7 +160,7 @@ async def upload(collection_id: Optional[str] = None, api_key: Optional[str] = N
                     "id": kw, 
                     "label": kw, 
                     "group": "entity",
-                    "title": f"ENTITY: {kw}\nType: Technical Concept"
+                    "title": f"<b>ENTITY:</b> {kw}<br>Type: Technical Concept"
                 })
                 added_ids.add(kw)
             
@@ -305,16 +198,7 @@ async def query(request: QueryRequest):
     retrieved = [c["chunks"][idx] for idx in I[0] if idx != -1 and idx < len(c["chunks"])]
     context = "\n\n".join([f"[Source: {ch['source']}, Page: {ch['page']+1}] {ch['text']}" for ch in retrieved])
     
-    # Configure API key and model dynamically on every query to pick up changes instantly
-    session_key = c.get("api_key")
-    active_key = request.api_key or session_key or get_api_key()
-    active_model = request.model or get_gemini_model()
-    
-    # Startup/first-request validation step: checks configured model and key
-    validate_gemini_configuration(active_key, active_model)
-    
-    # Instantiate supported Google Gen AI client path
-    client = genai.Client(api_key=active_key)
+    model = genai.GenerativeModel(PRIMARY_MODEL)
     
     # 2. PIPELINE A: BASIC RAG SYNTHESIS
     basic_rag_prompt = f"""
@@ -370,14 +254,16 @@ async def query(request: QueryRequest):
     """
     
     try:
-        basic_rag_answer = generate_with_retry(client, active_model, basic_rag_prompt)
+        rag_resp = model.generate_content(basic_rag_prompt)
+        basic_rag_answer = rag_resp.text
     except Exception as e:
-        handle_gemini_exception(e, active_model)
+        basic_rag_answer = f"⚠️ Basic RAG Error: {str(e)}"
         
     try:
-        graphrag_answer = generate_with_retry(client, active_model, graph_rag_prompt)
+        grag_resp = model.generate_content(graph_rag_prompt)
+        graphrag_answer = grag_resp.text
     except Exception as e:
-        handle_gemini_exception(e, active_model)
+        graphrag_answer = f"⚠️ GraphRAG Error: {str(e)}"
         
     # The primary answer displayed in chat bubbles is the top-tier GraphRAG answer!
     llm_answer = graphrag_answer
@@ -400,7 +286,7 @@ async def query(request: QueryRequest):
                 "id": ch_id, 
                 "label": f"Chunk {ch_id.split('_')[-1]}", 
                 "group": "chunk",
-                "title": f"CHUNK CONTENT:\n{ch['text'][:300]}..."
+                "title": f"<b>CHUNK CONTENT:</b><br>{ch['text'][:300]}..."
             })
             added_ids.add(ch_id)
         edges.append({"from": ch["source"], "to": ch_id, "label": "HAS_CHUNK"})
@@ -412,7 +298,7 @@ async def query(request: QueryRequest):
                     "id": kw, 
                     "label": kw, 
                     "group": "entity",
-                    "title": f"ENTITY: {kw}\nType: Traversed Semantic Link"
+                    "title": f"<b>ENTITY:</b> {kw}<br>Type: Traversed Semantic Link"
                 })
                 added_ids.add(kw)
             edges.append({"from": ch_id, "to": kw, "label": "MENTIONS"})
@@ -425,7 +311,6 @@ async def query(request: QueryRequest):
         rag_chunks_used=len(retrieved),
         graph_nodes_used=len(nodes),
         collection_id=request.collection_id,
-        viz_data={"nodes": nodes, "edges": edges},
         debug_info={"retrieved_pages": [ch["page"]+1 for ch in retrieved], "viz_data": {"nodes": nodes, "edges": edges}}
     )
 
