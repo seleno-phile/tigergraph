@@ -238,7 +238,9 @@ def upload_files(files, progress_bar):
         files_data = [("files", (f.name, f.read(), f.type)) for f in files]
         
         params = {"collection_id": st.session_state.collection_id} if st.session_state.collection_id else {}
-        
+        if st.session_state.get("gemini_api_key"):
+            params["api_key"] = st.session_state.gemini_api_key
+            
         response = requests.post(f"{API_BASE_URL}/upload", files=files_data, params=params)
         if response.status_code != 200: return {"error": f"Error: {response.text}"}
         
@@ -275,9 +277,16 @@ def upload_files(files, progress_bar):
 
 def query_backend(query: str):
     try:
+        payload = {
+            "query": query,
+            "collection_id": st.session_state.collection_id
+        }
+        if st.session_state.get("gemini_api_key"):
+            payload["api_key"] = st.session_state.gemini_api_key
+            
         response = requests.post(
             f"{API_BASE_URL}/query",
-            json={"query": query, "collection_id": st.session_state.collection_id}
+            json=payload
         )
         return response.json()
     except Exception as e:
@@ -301,6 +310,31 @@ with st.sidebar:
         
     st.caption("Intelligence System v2.0")
     
+    # Secure API Key Ingestion with fallback
+    default_key = os.getenv("GEMINI_API_KEY", "")
+    if not default_key and os.path.exists(".env"):
+        try:
+            with open(".env", "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip().startswith("GEMINI_API_KEY="):
+                        default_key = line.strip().split("=", 1)[1].strip().strip('"').strip("'")
+        except Exception:
+            pass
+            
+    if "gemini_api_key" not in st.session_state:
+        st.session_state.gemini_api_key = default_key if default_key != "REPLACE_WITH_YOUR_NEW_API_KEY" else ""
+        
+    st.subheader("🔑 API Key")
+    api_key_input = st.text_input(
+        "Gemini AI Credentials",
+        type="password",
+        value=st.session_state.gemini_api_key,
+        placeholder="Paste Gemini API Key...",
+        help="Securely configure or override your Gemini AI Studio API key in real-time."
+    )
+    if api_key_input != st.session_state.gemini_api_key:
+        st.session_state.gemini_api_key = api_key_input
+        
     st.subheader("📄 Knowledge Base")
     uploaded_files = st.file_uploader("Index Documents", type=["pdf", "txt", "docx"], accept_multiple_files=True)
     

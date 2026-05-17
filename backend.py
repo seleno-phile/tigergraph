@@ -65,6 +65,7 @@ def generate_with_retry(model, prompt, retries=3, delay=5):
 class QueryRequest(BaseModel):
     query: str
     collection_id: str
+    api_key: Optional[str] = None
 
 class QueryResponse(BaseModel):
     llm_answer: str
@@ -97,14 +98,16 @@ def extract_keywords(text: str) -> List[str]:
     return list(set(words))[:15]
 
 @app.post("/upload", response_model=UploadResponse)
-async def upload(collection_id: Optional[str] = None, files: List[UploadFile] = File(...)):
+async def upload(collection_id: Optional[str] = None, api_key: Optional[str] = None, files: List[UploadFile] = File(...)):
     if not collection_id: collection_id = str(uuid.uuid4())
     if collection_id not in collections:
         collections[collection_id] = {
             "docs": [], "chunks": [], "graph_nodes": {}, "graph_edges": [],
-            "embeddings": None, "faiss_index": None
+            "embeddings": None, "faiss_index": None, "api_key": api_key
         }
     c = collections[collection_id]
+    if api_key:
+        c["api_key"] = api_key
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
     all_texts = []
     
@@ -227,7 +230,8 @@ async def query(request: QueryRequest):
     context = "\n\n".join([f"[Source: {ch['source']}, Page: {ch['page']+1}] {ch['text']}" for ch in retrieved])
     
     # Configure API key dynamically on every query to pick up changes instantly
-    active_key = get_api_key()
+    session_key = c.get("api_key")
+    active_key = request.api_key or session_key or get_api_key()
     genai.configure(api_key=active_key)
     model = genai.GenerativeModel(PRIMARY_MODEL)
     
