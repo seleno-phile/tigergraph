@@ -91,14 +91,20 @@ def handle_gemini_exception(e: Exception, model_name: str):
         detail=f"Configuration/Initialization Error: The configured model '{model_name}' or API key returned an upstream error. Technical details: {err_msg}"
     )
 
+validated_configs = set()
+
 def validate_gemini_configuration(api_key: Optional[str], model_name: str):
-    """Startup or first-request validation step that checks configured model supports text generation"""
+    """Startup or first-request validation step that checks configured model supports text generation, caching successful results to avoid per-query latency."""
     if not api_key or api_key == "REPLACE_WITH_YOUR_NEW_KEY":
         raise HTTPException(
             status_code=400,
             detail="Configuration Error: Gemini API Key is missing or not configured. Please supply a valid key via the sidebar or environment."
         )
     
+    config_cache_key = (api_key, model_name)
+    if config_cache_key in validated_configs:
+        return
+        
     try:
         client = genai.Client(api_key=api_key)
         # Dry-run validation call to verify model capability and key status
@@ -107,6 +113,7 @@ def validate_gemini_configuration(api_key: Optional[str], model_name: str):
             contents="Test validation query",
             config={"max_output_tokens": 1}
         )
+        validated_configs.add(config_cache_key)
     except Exception as e:
         handle_gemini_exception(e, model_name)
 
@@ -144,6 +151,7 @@ class QueryResponse(BaseModel):
     graph_nodes_used: int
     collection_id: str
     debug_info: Dict[str, Any]
+    viz_data: Optional[Dict[str, Any]] = None
 
 class UploadResponse(BaseModel):
     collection_id: str
@@ -248,7 +256,7 @@ async def upload(collection_id: Optional[str] = None, api_key: Optional[str] = N
             "id": ch_id, 
             "label": f"Chunk {ch_id.split('_')[-1]}", 
             "group": "chunk",
-            "title": f"<b>CHUNK CONTENT:</b><br>{ch['text'][:300]}..." 
+            "title": f"CHUNK CONTENT:\n{ch['text'][:300]}..."
         })
         edges.append({"from": ch["source"], "to": ch_id, "label": "HAS_CHUNK"})
         chunk_kws = extract_keywords(ch["text"])
@@ -259,7 +267,7 @@ async def upload(collection_id: Optional[str] = None, api_key: Optional[str] = N
                     "id": kw, 
                     "label": kw, 
                     "group": "entity",
-                    "title": f"<b>ENTITY:</b> {kw}<br>Type: Technical Concept"
+                    "title": f"ENTITY: {kw}\nType: Technical Concept"
                 })
                 added_ids.add(kw)
             
@@ -364,18 +372,12 @@ async def query(request: QueryRequest):
     try:
         basic_rag_answer = generate_with_retry(client, active_model, basic_rag_prompt)
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Gemini API Basic RAG Synthesis Failed: {str(e)}"
-        )
+        handle_gemini_exception(e, active_model)
         
     try:
         graphrag_answer = generate_with_retry(client, active_model, graph_rag_prompt)
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Gemini API GraphRAG Synthesis Failed: {str(e)}"
-        )
+        handle_gemini_exception(e, active_model)
         
     # The primary answer displayed in chat bubbles is the top-tier GraphRAG answer!
     llm_answer = graphrag_answer
@@ -398,7 +400,7 @@ async def query(request: QueryRequest):
                 "id": ch_id, 
                 "label": f"Chunk {ch_id.split('_')[-1]}", 
                 "group": "chunk",
-                "title": f"<b>CHUNK CONTENT:</b><br>{ch['text'][:300]}..."
+                "title": f"CHUNK CONTENT:\n{ch['text'][:300]}..."
             })
             added_ids.add(ch_id)
         edges.append({"from": ch["source"], "to": ch_id, "label": "HAS_CHUNK"})
@@ -410,7 +412,7 @@ async def query(request: QueryRequest):
                     "id": kw, 
                     "label": kw, 
                     "group": "entity",
-                    "title": f"<b>ENTITY:</b> {kw}<br>Type: Traversed Semantic Link"
+                    "title": f"ENTITY: {kw}\nType: Traversed Semantic Link"
                 })
                 added_ids.add(kw)
             edges.append({"from": ch_id, "to": kw, "label": "MENTIONS"})
@@ -423,6 +425,7 @@ async def query(request: QueryRequest):
         rag_chunks_used=len(retrieved),
         graph_nodes_used=len(nodes),
         collection_id=request.collection_id,
+        viz_data={"nodes": nodes, "edges": edges},
         debug_info={"retrieved_pages": [ch["page"]+1 for ch in retrieved], "viz_data": {"nodes": nodes, "edges": edges}}
     )
 

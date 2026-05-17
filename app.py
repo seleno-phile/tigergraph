@@ -243,7 +243,7 @@ def upload_files(files, progress_bar, api_key: Optional[str] = None):
         if api_key:
             params["api_key"] = api_key
             
-        response = requests.post(f"{API_BASE_URL}/upload", files=files_data, params=params)
+        response = requests.post(f"{API_BASE_URL}/upload", files=files_data, params=params, timeout=60.0)
         if response.status_code != 200: return {"error": f"Error: {response.text}"}
         
         result = response.json()
@@ -290,7 +290,8 @@ def query_backend(query: str, api_key: Optional[str] = None, model: Optional[str
             
         response = requests.post(
             f"{API_BASE_URL}/query",
-            json=payload
+            json=payload,
+            timeout=60.0
         )
         
         if response.status_code != 200:
@@ -565,7 +566,9 @@ if 'global_graph' in st.session_state and st.session_state.global_graph:
                 
                 <div id="detailpanel" class="detail-panel">
                     <h4 class="panel-header">🔍 Node Intelligence</h4>
-                    <div id="detailcontent">Select a node to inspect...</div>
+                    <span id="panel-badge" style="display:none; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; color:white; margin-bottom:12px;"></span><br>
+                    <b id="panel-title" style="color:#e2e8f0; font-size:14px;"></b><br><br>
+                    <pre id="detailcontent" style="color:#a0aec0; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); padding:10px; border-radius:6px; max-height:300px; overflow-y:auto; font-size:12px; white-space:pre-wrap; word-wrap:break-word; font-family:inherit; line-height:1.5;">Select a node to inspect...</pre>
                 </div>
             </div>
             
@@ -652,18 +655,21 @@ if 'global_graph' in st.session_state and st.session_state.global_graph:
                     if (params.nodes.length > 0) {{
                         var nodeId = params.nodes[0];
                         var nodeData = data.nodes.find(n => n.id === nodeId);
-                        panel.style.display = 'block';
                         
                         var groupLabel = nodeData.group ? nodeData.group.toUpperCase() : "UNKNOWN";
                         var badgeColor = nodeData.group === 'document' ? '#00d4ff' : (nodeData.group === 'chunk' ? '#7000ff' : '#00d4ff');
                         
-                        var html = "<span style='display:inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; background:" + badgeColor + "; color:white; margin-bottom:12px;'>" + groupLabel + "</span><br>";
-                        html += "<b style='color:#e2e8f0; font-size:14px;'>" + nodeId + "</b><br><br>";
+                        var badge = document.getElementById('panel-badge');
+                        badge.style.display = 'inline-block';
+                        badge.innerText = groupLabel;
+                        badge.style.background = badgeColor;
+                        
+                        document.getElementById('panel-title').innerText = nodeId;
                         
                         var details = nodeData.title || "No further descriptive metadata available.";
-                        html += "<div style='color:#a0aec0; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); padding:10px; border-radius:6px; max-height:300px; overflow-y:auto;'>" + details + "</div>";
+                        content.innerText = details;
                         
-                        content.innerHTML = html;
+                        panel.style.display = 'block';
                     }} else {{
                         panel.style.display = 'none';
                     }}
@@ -862,7 +868,9 @@ for message in st.session_state.messages:
                                 
                                 <div id="detailpanel-{msg_hash}" class="detail-panel">
                                     <h4 class="panel-header">🔍 Concept Intelligence</h4>
-                                    <div id="detailcontent-{msg_hash}">Select a node to inspect...</div>
+                                    <span id="panel-badge-{msg_hash}" style="display:none; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: bold; color:white; margin-bottom:8px;"></span><br>
+                                    <b id="panel-title-{msg_hash}" style="color:#e2e8f0; font-size:12px;"></b><br><br>
+                                    <pre id="detailcontent-{msg_hash}" style="color:#a0aec0; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); padding:8px; border-radius:4px; max-height:220px; overflow-y:auto; font-size:11px; white-space:pre-wrap; word-wrap:break-word; font-family:inherit; line-height:1.5;">Select a node to inspect...</pre>
                                 </div>
                             </div>
                             
@@ -949,18 +957,21 @@ for message in st.session_state.messages:
                                     if (params.nodes.length > 0) {{
                                         var nodeId = params.nodes[0];
                                         var nodeData = data.nodes.find(n => n.id === nodeId);
-                                        panel.style.display = 'block';
                                         
                                         var groupLabel = nodeData.group ? nodeData.group.toUpperCase() : "UNKNOWN";
                                         var badgeColor = nodeData.group === 'document' ? '#00d4ff' : (nodeData.group === 'chunk' ? '#7000ff' : '#00d4ff');
                                         
-                                        var html = "<span style='display:inline-block; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: bold; background:" + badgeColor + "; color:white; margin-bottom:8px;'>" + groupLabel + "</span><br>";
-                                        html += "<b style='color:#e2e8f0; font-size:12px;'>" + nodeId + "</b><br><br>";
+                                        var badge = document.getElementById('panel-badge-{msg_hash}');
+                                        badge.style.display = 'inline-block';
+                                        badge.innerText = groupLabel;
+                                        badge.style.background = badgeColor;
+                                        
+                                        document.getElementById('panel-title-{msg_hash}').innerText = nodeId;
                                         
                                         var details = nodeData.title || "No details available.";
-                                        html += "<div style='color:#a0aec0; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); padding:8px; border-radius:4px; max-height:220px; overflow-y:auto;'>" + details + "</div>";
+                                        content.innerText = details;
                                         
-                                        content.innerHTML = html;
+                                        panel.style.display = 'block';
                                     }} else {{
                                         panel.style.display = 'none';
                                     }}
@@ -996,8 +1007,8 @@ if prompt := st.chat_input("Ask a complex question about your documents..."):
                     st.markdown(final_answer)
                     
                     # 2. Detailed Insights
+                    viz_data = result.get("viz_data") or result.get("debug_info", {}).get("viz_data")
                     with st.expander("🛠️ Retrieval & Reasoning Paths"):
-                        viz_data = result.get("viz_data")
                         if viz_data:
                             tab1, tab2, tab3 = st.tabs(["🔍 Basic RAG", "🧠 GraphRAG Path", "🌐 Knowledge Explorer"])
                         else:
@@ -1173,7 +1184,9 @@ if prompt := st.chat_input("Ask a complex question about your documents..."):
                                         
                                         <div id="detailpanel-{msg_hash}" class="detail-panel">
                                             <h4 class="panel-header">🔍 Concept Intelligence</h4>
-                                            <div id="detailcontent-{msg_hash}">Select a node to inspect...</div>
+                                            <span id="panel-badge-{msg_hash}" style="display:none; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: bold; color:white; margin-bottom:8px;"></span><br>
+                                            <b id="panel-title-{msg_hash}" style="color:#e2e8f0; font-size:12px;"></b><br><br>
+                                            <pre id="detailcontent-{msg_hash}" style="color:#a0aec0; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); padding:8px; border-radius:4px; max-height:220px; overflow-y:auto; font-size:11px; white-space:pre-wrap; word-wrap:break-word; font-family:inherit; line-height:1.5;">Select a node to inspect...</pre>
                                         </div>
                                     </div>
                                     
@@ -1260,18 +1273,21 @@ if prompt := st.chat_input("Ask a complex question about your documents..."):
                                             if (params.nodes.length > 0) {{
                                                 var nodeId = params.nodes[0];
                                                 var nodeData = data.nodes.find(n => n.id === nodeId);
-                                                panel.style.display = 'block';
                                                 
                                                 var groupLabel = nodeData.group ? nodeData.group.toUpperCase() : "UNKNOWN";
                                                 var badgeColor = nodeData.group === 'document' ? '#00d4ff' : (nodeData.group === 'chunk' ? '#7000ff' : '#00d4ff');
                                                 
-                                                var html = "<span style='display:inline-block; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: bold; background:" + badgeColor + "; color:white; margin-bottom:8px;'>" + groupLabel + "</span><br>";
-                                                html += "<b style='color:#e2e8f0; font-size:12px;'>" + nodeId + "</b><br><br>";
+                                                var badge = document.getElementById('panel-badge-{msg_hash}');
+                                                badge.style.display = 'inline-block';
+                                                badge.innerText = groupLabel;
+                                                badge.style.background = badgeColor;
+                                                
+                                                document.getElementById('panel-title-{msg_hash}').innerText = nodeId;
                                                 
                                                 var details = nodeData.title || "No details available.";
-                                                html += "<div style='color:#a0aec0; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); padding:8px; border-radius:4px; max-height:220px; overflow-y:auto;'>" + details + "</div>";
+                                                content.innerText = details;
                                                 
-                                                content.innerHTML = html;
+                                                panel.style.display = 'block';
                                             }} else {{
                                                 panel.style.display = 'none';
                                             }}
@@ -1291,8 +1307,10 @@ if prompt := st.chat_input("Ask a complex question about your documents..."):
                         "viz_data": viz_data
                     })
                 else:
+                    import html
                     error_msg = result["error"]
                     status_code = result.get("status_code", 500)
+                    escaped_error_msg = html.escape(str(error_msg))
                     
                     error_html = f"""
                     <div style="background: rgba(255, 75, 75, 0.08); border: 1px solid rgba(255, 75, 75, 0.25); border-radius: 12px; padding: 20px; margin: 10px 0; font-family: 'Plus Jakarta Sans', sans-serif;">
@@ -1301,7 +1319,7 @@ if prompt := st.chat_input("Ask a complex question about your documents..."):
                             The query synthesis pipeline encountered a <b>Gemini Configuration or Upstream Provider Error</b>:
                         </p>
                         <code style="display: block; background: rgba(0, 0, 0, 0.4); color: #ff8888; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 0.85rem; word-break: break-all; margin-bottom: 15px;">
-                            {error_msg}
+                            {escaped_error_msg}
                         </code>
                         <h5 style="color: #00d4ff; margin-bottom: 8px;">💡 Actionable Troubleshooting Guidance:</h5>
                         <ul style="color: #cbd5e1; font-size: 0.9rem; margin-left: 20px; line-height: 1.5; padding-left: 0;">
